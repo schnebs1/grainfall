@@ -34,7 +34,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ---------- saved progress ----------
 // The iPhone app injects window.__grainfallSave and stores writes natively; a browser falls back to localStorage.
 const freshSave = () => ({
-  v: 1, diff: 'normal', wood: 'maple', best: {}, stars: [], unlocked: 1, woodsSeen: ['maple'], tutorialDone: false,
+  v: 1, diff: 'normal', wood: 'maple', best: {}, stars: [], levelBest: [], top: {}, unlocked: 1, woodsSeen: ['maple'], tutorialDone: false,
   stats: { games: 0, rows: 0, tetrises: 0, bestCombo: 0, golds: 0, knots: 0, axes: 0 },
   daily: { last: '', streak: 0, bestStreak: 0, date: '', best: 0 },
   settings: { drag: 'normal', haptics: true, sound: true },
@@ -46,6 +46,8 @@ let SAVE = freshSave();
   if (saved && typeof saved === 'object') {
     const d = freshSave();
     SAVE = { ...d, ...saved, stats: { ...d.stats, ...saved.stats }, daily: { ...d.daily, ...saved.daily }, settings: { ...d.settings, ...saved.settings } };
+    // high-score lists came later: start each Classic list with the best score saved before them
+    if (!saved.top) for (const k of Object.keys(DIFFS)) if (SAVE.best['classic-' + k]) SAVE.top['classic-' + k] = [{ s: SAVE.best['classic-' + k], d: '' }];
     return;
   }
   // carry over best scores kept before progress was saved as one record
@@ -581,6 +583,13 @@ function draw() {
     ctx.shadowColor = 'transparent';
   }
   if (R.dusk && state !== 'menu') drawDusk(W, H);
+  if (mode === 'level' && state !== 'menu') { // gold still to dig out, top left of the board
+    const s = cell * 1.3, left = countCells(GOLD);
+    ctx.fillStyle = 'rgba(20,8,0,.55)'; ctx.beginPath(); ctx.roundRect(4, 4, s * 2.9, s + 6, 6); ctx.fill();
+    ctx.drawImage(special[GOLD], 7, 7, s, s);
+    ctx.fillStyle = '#ffd24a'; ctx.font = `${s * 0.8}px "Lilita One", sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(`× ${left}`, 11 + s, 7 + s / 2);
+  }
   if (R.grow && state !== 'menu') { // growth meter along the bottom edge
     ctx.fillStyle = 'rgba(20,10,0,.5)'; ctx.fillRect(0, H - 4, W, 4);
     ctx.fillStyle = growT > R.grow - 1.5 ? '#c6f07a' : '#7fbf4a'; ctx.fillRect(0, H - 4, W * growT / R.grow, 4);
@@ -723,6 +732,16 @@ function newUnlocks() {
   SAVE.woodsSeen.push(...fresh);
   return fresh;
 }
+const levelTotal = () => SAVE.levelBest.reduce((a, s) => a + (s || 0), 0);
+// keep the five best scores for a mode; returns this score's place on the list (1 is a new best), or 0
+function addTop(key, s) {
+  if (!s) return 0;
+  const list = SAVE.top[key] ||= [], e = { s, d: today() };
+  list.push(e); list.sort((a, b) => b.s - a.s); list.length = Math.min(list.length, 5);
+  return list.indexOf(e) + 1;
+}
+const placeText = p => p === 1 ? 'New best!' : p ? `${p}${['', 'st', 'nd', 'rd'][p] || 'th'} best` : '';
+const fmt = n => n.toLocaleString();
 const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15 ? 2 : 1;
 
 // ---------- game flow ----------
@@ -775,40 +794,45 @@ function finish(kind) {
   let title, detail, stars = 0, main = ['Play again', () => startGame(mode, levelIdx)], alt = null;
   if (mode === 'level') {
     const L = LEVELS[levelIdx];
+    const n = levelIdx + 1;
     if (kind === 'won') {
+      // finishing early pays: 10 points for every second left on the clock
+      const secs = Math.ceil(timeLeft), bonus = secs * 10, best = SAVE.levelBest[levelIdx] || 0;
+      score += bonus;
+      if (score > best) SAVE.levelBest[levelIdx] = score;
       stars = starsFor(timeLeft, L.time);
       SAVE.stars[levelIdx] = Math.max(SAVE.stars[levelIdx] || 0, stars);
       SAVE.unlocked = Math.max(SAVE.unlocked, levelIdx + 2);
-      title = 'Level complete!';
-      detail = `${L.name} · ${Math.ceil(timeLeft)} s to spare · ${score} points`;
+      title = `Level ${n} complete!`;
+      detail = `${L.name} · ${secs} s to spare (+${fmt(bonus)})\n` + (score > best ? 'New best!' : `Best ${fmt(best)}`) + ` · Total score ${fmt(levelTotal())}`;
       if (levelIdx + 1 < LEVELS.length) main = ['Next level', () => startGame('level', levelIdx + 1)];
       alt = ['Retry', () => startGame('level', levelIdx)];
       chime(523, 0, 0.25); chime(659, 0.12, 0.25); chime(784, 0.24, 0.25); chime(1047, 0.4, 0.3, 1.2);
       haptic('success');
     } else {
       title = kind === 'time' ? 'Out of time' : 'Stacked out';
-      detail = `${L.name} · ${countCells(GOLD)} gold left`;
+      detail = `Level ${n}, ${L.name} · ${countCells(GOLD)} gold left`;
       main = ['Retry', () => startGame('level', levelIdx)];
     }
   } else if (mode === 'daily') {
-    const isBest = recordDaily(score);
+    const isBest = recordDaily(score), place = addTop('daily', score);
     const st = SAVE.daily.streak;
     title = kind === 'stacked' ? 'Stacked out' : "Time's up";
-    detail = `Daily board · ${lines} rows · ${st}-day streak` + (isBest ? ' · Best today!' : ` · Today's best ${SAVE.daily.best}`);
+    detail = `Daily board · ${lines} rows · ${st}-day streak` + (isBest ? ' · Best today!' : ` · Today's best ${fmt(SAVE.daily.best)}`) + (place ? `\n${placeText(place)} daily score` : '');
     main = ['Try again', () => startGame('daily')];
   } else if (mode === 'zen') {
     title = 'Nice and calm';
-    detail = `${lines} rows cleared`;
+    detail = `${lines} rows cleared` + (lines ? ` · ${placeText(addTop('zen', lines))}` : '').replace(/ · $/, '');
   } else {
-    const key = 'classic-' + SAVE.diff, best = SAVE.best[key] || 0, isBest = score > best;
+    const key = 'classic-' + SAVE.diff, best = SAVE.best[key] || 0, isBest = score > best, place = addTop(key, score);
     if (isBest) SAVE.best[key] = score;
     title = kind === 'stacked' ? 'Stacked out' : "Time's up";
-    detail = `${lines} rows · ${DIFFS[SAVE.diff].name}` + (isBest ? ' · New best!' : ` · Best ${best}`);
+    detail = `${lines} rows · ${DIFFS[SAVE.diff].name}` + (isBest ? ' · New best!' : ` · Best ${fmt(best)}`) + (place > 1 ? ` · ${placeText(place)}` : '');
   }
   const fresh = newUnlocks();
   persist();
   $('overT').textContent = title;
-  $('overS').textContent = mode === 'zen' ? lines : score;
+  $('overS').textContent = fmt(mode === 'zen' ? lines : score);
   $('overB').textContent = detail;
   $('overStars').hidden = mode !== 'level' || kind !== 'won';
   $('overStars').innerHTML = [1, 2, 3].map(i => `<span class="${i <= stars ? 'on' : ''}">★</span>`).join('');
@@ -833,9 +857,9 @@ function quitToMenu() {
 const gravity = () => Math.max(R.minGrav, R.grav - Math.floor(lines / 8) * R.ramp) * (tutStep >= 0 && tutStep < 3 ? 2.5 : 1); // seconds per row
 
 function hudLabels() {
-  $('timeL').textContent = R.timer ? 'Time' : 'Rows';
+  $('timeL').textContent = mode === 'level' ? `Level ${levelIdx + 1}` : R.timer ? 'Time' : 'Rows';
   $('timeU').hidden = !R.timer;
-  $('scoreL').textContent = mode === 'level' ? 'Gold left' : 'Score';
+  $('scoreL').textContent = 'Score';
 }
 function hud() {
   // game controls only show while a game is running; visibility keeps the bar's height so the board doesn't resize
@@ -844,7 +868,7 @@ function hud() {
   $('timeU').hidden = !R.timer;
   $('timeV').textContent = R.timer ? Math.max(0, Math.ceil(timeLeft)) : lines;
   $('time').classList.toggle('low', !!R.timer && timeLeft <= 15 && state !== 'menu');
-  $('scoreV').textContent = mode === 'level' ? countCells(GOLD) : score;
+  $('scoreV').textContent = score;
 }
 
 // ---------- screens ----------
@@ -865,11 +889,11 @@ function refreshMenu() {
     : d.last === yesterday() ? `Keep your ${d.streak}-day streak going` : 'A new board every day';
 }
 function renderLevels() {
-  $('levelsSub').textContent = `${totalStars()} of ${LEVELS.length * 3} stars`;
+  $('levelsSub').textContent = `${totalStars()} of ${LEVELS.length * 3} stars · Total score ${fmt(levelTotal())}`;
   $('levelGrid').innerHTML = LEVELS.map((L, i) => {
     const locked = i + 1 > SAVE.unlocked, s = SAVE.stars[i] || 0;
     const starRow = [1, 2, 3].map(k => `<span class="${k <= s ? 'on' : ''}">★</span>`).join('');
-    return (i % 10 ? '' : `<h3 class="chap">${CHAPTERS[i / 10]}</h3>`) + `<button class="lvl${i % 10 === 9 ? ' boss' : ''}" type="button" data-i="${i}" ${locked ? 'disabled aria-label="Level ' + (i + 1) + ', locked"' : ''}><b>${i + 1}</b><small>${L.name}</small><i>${locked ? 'Locked' : starRow}</i></button>`;
+    return (i % 10 ? '' : `<h3 class="chap">${CHAPTERS[i / 10]}</h3>`) + `<button class="lvl${i % 10 === 9 ? ' boss' : ''}" type="button" data-i="${i}" ${locked ? 'disabled aria-label="Level ' + (i + 1) + ', locked"' : ''}><b>${i + 1}</b><small>${L.name}</small><i>${locked ? 'Locked' : starRow}</i>${SAVE.levelBest[i] ? `<em>${fmt(SAVE.levelBest[i])}</em>` : ''}</button>`;
   }).join('');
   $('levelGrid').querySelector(`[data-i="${Math.min(SAVE.unlocked, LEVELS.length) - 1}"]`)?.scrollIntoView({ block: 'center' });
 }
@@ -894,12 +918,25 @@ function renderWoods() {
     grid.append(btn);
   }
 }
+function renderScores() {
+  const when = d => d ? new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Earlier';
+  const list = (title, key, unit = '') => {
+    const l = SAVE.top[key] || [];
+    return `<h3>${title}</h3><dl>` + (l.length ? l.map((e, i) => `<dt>${i + 1}. ${when(e.d)}</dt><dd>${fmt(e.s)}${unit}</dd>`).join('')
+      : '<dt class="none">No scores yet</dt><dd></dd>') + '</dl>';
+  };
+  const lv = SAVE.levelBest.map((s, i) => [s || 0, i]).filter(x => x[0]).sort((a, b) => b[0] - a[0]).slice(0, 5);
+  $('hsList').innerHTML = `<h3>Levels</h3><dl><dt>Total score</dt><dd>${fmt(levelTotal())}</dd>` +
+    lv.map(([s, i]) => `<dt>Level ${i + 1} · ${LEVELS[i].name}</dt><dd>${fmt(s)}</dd>`).join('') + '</dl>' +
+    Object.keys(DIFFS).map(k => list(`Classic · ${DIFFS[k].name}`, 'classic-' + k)).join('') +
+    list('Daily board', 'daily') + list('Zen', 'zen', ' rows');
+}
 function renderStats() {
+  renderScores();
   const st = SAVE.stats, d = SAVE.daily;
   const rows = [
     ['Games played', st.games], ['Rows cleared', st.rows], ['Tetrises', st.tetrises], ['Best combo', st.bestCombo ? '×' + st.bestCombo : '–'],
     ['Gold blocks', st.golds], ['Knots broken', st.knots], ['Axes swung', st.axes],
-    ...Object.keys(DIFFS).map(k => [`Best Classic, ${DIFFS[k].name}`, SAVE.best['classic-' + k] || '–']),
     ['Level stars', `${totalStars()} / ${LEVELS.length * 3}`], ['Daily streak', `${d.streak} (best ${d.bestStreak})`],
   ];
   $('statList').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${typeof v === 'number' ? v.toLocaleString() : v}</dd>`).join('');

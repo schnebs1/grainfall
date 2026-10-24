@@ -128,6 +128,16 @@ button:disabled { cursor: default; }
 .wood small { font-family: var(--body); font-weight: 800; font-size: 11px; color: #7a3e18; line-height: 1.3; }
 .wood[aria-pressed="true"] { outline: 3px solid var(--gold); outline-offset: 2px; }
 .wood.locked { opacity: .6; filter: saturate(.6); }
+#overB { white-space: pre-line; }
+.lvl em { font-style: normal; font-family: var(--body); font-weight: 800; font-size: 11px; color: #7a3e18; }
+#hsList { width: min(100%, 290px); text-align: left; }
+#hsList h3, .stathead { font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--cream); margin: 14px 0 6px; }
+#hsList h3:first-child { margin-top: 0; }
+.stathead { width: min(100%, 290px); text-align: left; }
+#hsList dl { display: grid; grid-template-columns: 1fr auto; gap: 5px 16px; margin: 0; }
+#hsList dt { font-size: 14px; font-weight: 700; color: var(--sand); align-self: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hsList dt.none { opacity: .6; font-weight: 600; }
+#hsList dd { margin: 0; font-family: var(--display); color: #ffd28a; font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
 #statList { display: grid; grid-template-columns: 1fr auto; gap: 7px 16px; margin: 0; width: min(100%, 290px); text-align: left; }
 #statList dt { font-size: 14px; font-weight: 700; color: var(--sand); align-self: center; }
 #statList dd { margin: 0; font-family: var(--display); color: #ffd28a; font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -176,7 +186,7 @@ button:disabled { cursor: default; }
         </div>
         <div class="row small">
           <button id="mWoods" type="button">Workshop</button>
-          <button id="mStats" type="button">Stats</button>
+          <button id="mStats" type="button">Scores</button>
           <button id="mSettings" type="button">Settings</button>
         </div>
       </div>
@@ -209,7 +219,9 @@ button:disabled { cursor: default; }
       </div>
 
       <div class="overlay sub" id="stats" hidden>
-        <h2>Stats</h2>
+        <h2>Scores</h2>
+        <div id="hsList"></div>
+        <h3 class="stathead">Stats</h3>
         <dl id="statList"></dl>
         <button class="back link" type="button">Back</button>
       </div>
