@@ -2,7 +2,7 @@
 // Wood drawing lives in wood.js and the dig levels in levels.js.
 
 const VTOP = 4, VBOT = 17; // pile shape on the full-size board; scaled for the half-size one
-// Board size in blocks. Levels use the full 22 × 36; the other modes use a half-size grid (11 × 18) so their blocks are drawn twice as big.
+// Board size in blocks. Levels and Daily use the full 22 × 36; Classic and Zen use a half-size grid (11 × 18) so their blocks are drawn twice as big.
 let COLS = 22, ROWS = 36;
 // effects (popups, shake) are sized to the board, not the block, so they look the same at any block size
 const fxUnit = () => COLS * cell / 22;
@@ -112,11 +112,11 @@ function placeIn(row, v) {
   row.forEach((x, i) => x && x <= VARIANTS && plain.push(i));
   if (plain.length) row[plain[rnd(plain.length)]] = v;
 }
-// A V-shaped pile from VTOP down to crackTop, then packed rows with a winding crack to the bottom.
-function buildBoard(crackTop, width, seg) {
+// A V-shaped pile from top (VTOP unless given) down to crackTop, then packed rows with a winding crack to the bottom.
+function buildBoard(crackTop, width, seg, top = VTOP) {
   grid = [];
   shaft = { c: (COLS >> 1) - (width > 1 ? 1 : 0), seg: 0, width, min: seg[0], max: seg[1] };
-  const vtop = Math.round(VTOP * ROWS / 36);
+  const vtop = Math.round(top * ROWS / 36);
   for (let r = 0; r < vtop; r++) grid.push(new Array(COLS).fill(0));
   let wl = 1, wr = 1;
   const maxW = (COLS - Math.round(COLS * 6 / 22)) >> 1; // leaves an opening at the bottom of the V: 6 wide, or 4 on the half-size board
@@ -782,7 +782,7 @@ const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15
 function startGame(m, li = -1) {
   initAudio();
   mode = m; levelIdx = li;
-  m === 'level' ? setBoardSize(22, 36) : setBoardSize(11, 18);
+  m === 'level' || m === 'daily' ? setBoardSize(22, 36) : setBoardSize(11, 18);
   if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
   else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
   else if (m === 'zen') R = { ...ZEN };
@@ -792,7 +792,7 @@ function startGame(m, li = -1) {
       refill: false, stackOutEnds: true, grow: L.grow || 0, fog: !!L.fog, dusk: !!L.dusk };
   }
   rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + today())) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
-  if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(Math.round(VBOT * ROWS / 36), 1, [1, 4]);
+  if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(24, 1, [1, 4], 14); // Daily: the pile starts in the lower part of the board
   bag = []; nextKey = takeKey(); holdKey = null;
   particles = []; popups = []; flashes = []; shakeT = 0;
   score = 0; lines = 0; combo = -1; b2b = false; growT = 0;
