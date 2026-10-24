@@ -1,6 +1,6 @@
 // Offline support for the web version: serve from the cache straight away, and refresh the cache in the
 // background so the next launch picks up any update.
-const CACHE = 'grainfall-44e1519';
+const CACHE = 'grainfall-97fb105';
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', 'index.html', 'wood.js', 'levels.js', 'music.js', 'game.js',
     'fonts/LilitaOne.woff2', 'fonts/Nunito.woff2', 'manifest.webmanifest', 'icon-180.png'])));

@@ -1,7 +1,16 @@
 // Grainfall: board, pieces, modes, rewards and saved progress.
 // Wood drawing lives in wood.js and the dig levels in levels.js.
 
-const COLS = 22, ROWS = 36, VTOP = 4, VBOT = 17;
+const VTOP = 4, VBOT = 17;
+// Board size in blocks. Classic uses a half-size grid (11 × 18) so its blocks are drawn twice as big.
+let COLS = 22, ROWS = 36;
+// effects (popups, shake) are sized to the board, not the block, so they look the same at any block size
+const fxUnit = () => COLS * cell / 22;
+function setBoardSize(cols, rows) {
+  if (cols === COLS && rows === ROWS) return;
+  COLS = cols; ROWS = rows;
+  resize();
+}
 const VARIANTS = 10, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -19,9 +28,9 @@ const shapeOf = key => key === 'AXE' ? [[1]] : SHAPES[key];
 // gold / knot: chance a fresh row carries one; axe: chance a piece is an axe; low: rows of wood Classic starts with.
 // Classic is endless and has no clock; time is the Daily board's clock (Daily plays by Normal).
 const DIFFS = {
-  easy:   { name: 'Easy',   time: 240, grav: 1.0,  ramp: 0.04, minGrav: 0.2,  ghost: true,  mult: 1,   gold: 0.1,  knot: 0.02, axe: 0.03,  low: 3, note: 'Slow pieces that speed up gently, landing guide.' },
-  normal: { name: 'Normal', time: 180, grav: 0.75, ramp: 0.06, minGrav: 0.1,  ghost: true,  mult: 1.5, gold: 0.08, knot: 0.04, axe: 0.025, low: 4, note: 'Steady speed-up. Points ×1.5.' },
-  hard:   { name: 'Hard',   time: 120, grav: 0.45, ramp: 0.07, minGrav: 0.05, ghost: false, mult: 2,   gold: 0.07, knot: 0.07, axe: 0.02,  low: 6, note: 'Fast pieces, more knots, no landing guide. Points ×2.' },
+  easy:   { name: 'Easy',   time: 240, grav: 1.0,  ramp: 0.04, minGrav: 0.2,  ghost: true,  mult: 1,   gold: 0.1,  knot: 0.02, axe: 0.03,  low: 2, note: 'Slow pieces that speed up gently, landing guide.' },
+  normal: { name: 'Normal', time: 180, grav: 0.75, ramp: 0.06, minGrav: 0.1,  ghost: true,  mult: 1.5, gold: 0.08, knot: 0.04, axe: 0.025, low: 3, note: 'Steady speed-up. Points ×1.5.' },
+  hard:   { name: 'Hard',   time: 120, grav: 0.45, ramp: 0.07, minGrav: 0.05, ghost: false, mult: 2,   gold: 0.07, knot: 0.07, axe: 0.02,  low: 4, note: 'Fast pieces, more knots, no landing guide. Points ×2.' },
 };
 const ZEN = { timer: 0, grav: 1.1, ramp: 0, minGrav: 1.1, ghost: true, mult: 1, gold: 0.15, knot: 0, axe: 0.04, low: 3, refill: false, stackOutEnds: false };
 const DRAG = { slow: 1.4, normal: 1, fast: 0.7 };
@@ -131,7 +140,7 @@ function lowBoard(n) {
 }
 function lowRow() {
   const row = Array.from({ length: COLS }, randV);
-  for (let h = 2 + rnd(2); h > 0; h--) row[rnd(COLS)] = 0;
+  for (let h = COLS / 11 + rnd(2); h > 0; h--) row[rnd(COLS)] = 0; // 1-2 gaps on Classic's narrow board, 2-3 on the wide one
   if (R.gold && rng() < R.gold * 2) placeIn(row, GOLD);
   if (R.knot && rng() < R.knot * 2) placeIn(row, KNOT);
   return row;
@@ -248,8 +257,8 @@ function bounce(cells, full) {
   const y = (full[0] + 0.5) * cell;
   popups.push({ text: iron ? 'Clang!' : 'Knot!', size: 1.7, color: iron ? '#dfe6ec' : '#ffcf9a', x: COLS * cell / 2, y, t: 0, life: 1.1 });
   if (iron) chime(1760, 0, 0.12, 0.4);
-  popups.push({ text: 'Fill it again', size: 1.0, color: '#fff1d6', x: COLS * cell / 2, y: y + cell * 1.8, t: -0.08, life: 1.1 });
-  shakeT = reduceMotion ? 0 : 0.2; shakeAmp = cell * 0.2;
+  popups.push({ text: 'Fill it again', size: 1.0, color: '#fff1d6', x: COLS * cell / 2, y: y + fxUnit() * 1.8, t: -0.08, life: 1.1 });
+  shakeT = reduceMotion ? 0 : 0.2; shakeAmp = fxUnit() * 0.2;
   thunk(); haptic('warning');
   spawn();
 }
@@ -278,7 +287,7 @@ function clearRowsNow(full, axe) {
   const g0 = gravity();
   score += pts; lines += full.length;
   if (mode === 'classic' && gravity() < g0) // pieces just got faster
-    popups.push({ text: 'Faster!', size: 1.3, color: '#ffb35c', x: COLS * cell / 2, y: cell * 6, t: 0.3, life: 1.2 });
+    popups.push({ text: 'Faster!', size: 1.3, color: '#ffb35c', x: COLS * cell / 2, y: fxUnit() * 6, t: 0.3, life: 1.2 });
   const st = SAVE.stats;
   st.rows += full.length; st.golds += golds; st.knots += knots;
   if (tetris) st.tetrises++;
@@ -294,7 +303,7 @@ function clearRowsNow(full, axe) {
 function blast(rows, kegs) {
   const y = (rows[0] + 0.5) * cell;
   popups.push({ text: kegs > 1 ? `Boom ×${kegs}!` : 'Boom!', size: 2.1, color: '#ff9d4a', x: COLS * cell / 2, y: y - cell * 2, t: 0, life: 1.3 });
-  if (!reduceMotion) { shakeT = 0.5; shakeAmp = cell * 0.5; }
+  if (!reduceMotion) { shakeT = 0.5; shakeAmp = fxUnit() * 0.5; }
   thunk(); knock(70, 0.9); knock(110, 0.6, 0.05); haptic('heavy');
 }
 function amberBonus(rows, n) {
@@ -379,9 +388,9 @@ function celebrate(n, pts, b2bHit, rows, golds, axe) {
   if (b2bHit) out.push({ text: 'Back-to-back!', size: 1.2, color: '#ffb35c' });
   if (combo >= 1) out.push({ text: `Combo ×${combo + 1}`, size: 1.3 + Math.min(combo, 5) * 0.12, color: '#ffe08a' });
   out.push({ text: `+${pts}`, size: 1.5, color: '#fff1d6' });
-  out.forEach((l, i) => popups.push({ ...l, x: COLS * cell / 2, y: y + (i - (out.length - 1) / 2) * cell * 1.9, t: -i * 0.07, life: big ? 1.6 : 1.2 }));
+  out.forEach((l, i) => popups.push({ ...l, x: COLS * cell / 2, y: y + (i - (out.length - 1) / 2) * fxUnit() * 1.9, t: -i * 0.07, life: big ? 1.6 : 1.2 }));
   rows.forEach(r => flashes.push({ r, t: 0, gold: big || golds > 0 || combo >= 2 }));
-  if (!reduceMotion && !zen && (big || axe || combo >= 2)) { shakeT = big ? 0.45 : 0.25; shakeAmp = cell * (big ? 0.45 : 0.18); }
+  if (!reduceMotion && !zen && (big || axe || combo >= 2)) { shakeT = big ? 0.45 : 0.25; shakeAmp = fxUnit() * (big ? 0.45 : 0.18); }
   // chimes: one note per row cleared, climbing with the combo; a Tetris gets a full arpeggio. Zen is lower and softer.
   const root = (zen ? 262 : 392) * Math.pow(2, Math.min(combo, 8) * 2 / 12), vol = zen ? 0.6 : 1;
   const steps = big ? [0, 4, 7, 12, 16] : zen ? [0, 7, 12].slice(0, Math.max(1, n)) : [0, 4, 7].slice(0, Math.max(1, n));
@@ -408,11 +417,11 @@ function drawFx() {
   for (const p of popups) {
     if (p.t < 0) continue;
     const pop = p.t < 0.15 ? 0.5 + (p.t / 0.15) * 0.7 : p.t < 0.25 ? 1.2 - (p.t - 0.15) * 2 : 1;
-    const size = cell * p.size * pop;
+    const size = fxUnit() * p.size * pop;
     ctx.globalAlpha = Math.min(1, (p.life - p.t) / 0.35);
     ctx.font = `${size}px "Lilita One", "Arial Rounded MT Bold", sans-serif`;
     ctx.lineJoin = 'round'; ctx.lineWidth = size * 0.18; ctx.strokeStyle = '#4a1d06';
-    const y = p.y - p.t * cell * 1.6;
+    const y = p.y - p.t * fxUnit() * 1.6;
     ctx.strokeText(p.text, p.x, y);
     ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, y);
   }
@@ -431,7 +440,7 @@ function makeBg() {
   const c = document.createElement('canvas');
   c.width = W * dpr; c.height = H * dpr;
   const g = c.getContext('2d'); g.scale(dpr, dpr);
-  woodPlanks(g, W, H, cell, 30);
+  woodPlanks(g, W, H, W / 22, 30);
   const vg = g.createLinearGradient(0, 0, 0, H * 0.25);
   vg.addColorStop(0, 'rgba(15,5,0,.6)'); vg.addColorStop(1, 'rgba(15,5,0,0)');
   g.fillStyle = vg; g.fillRect(0, 0, W, H * 0.25);
@@ -772,6 +781,7 @@ const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15
 function startGame(m, li = -1) {
   initAudio();
   mode = m; levelIdx = li;
+  m === 'classic' ? setBoardSize(11, 18) : setBoardSize(22, 36);
   if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
   else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
   else if (m === 'zen') R = { ...ZEN };
@@ -1057,7 +1067,7 @@ wrap.addEventListener('pointermove', e => {
   const vy = (e.clientY - touch.lastY) / Math.max(1, now - touch.lastT);
   touch.lastY = e.clientY; touch.lastT = now;
   if (Math.abs(e.clientX - touch.sx) > 8 || Math.abs(dy) > 8) touch.moved = true;
-  if (vy > 1.4 && dy > cell * 2) { hardDrop(); touch = null; return; }
+  if (vy > 1.4 && dy > fxUnit() * 2) { hardDrop(); touch = null; return; }
   const wantDown = Math.floor(Math.max(0, dy) / step);
   while (touch.dropped < wantDown && tryMove(0, 1)) { touch.dropped++; score++; }
   touch.dropped = Math.max(touch.dropped, wantDown);
