@@ -1,8 +1,8 @@
 // Grainfall: board, pieces, modes, rewards and saved progress.
 // Wood drawing lives in wood.js and the dig levels in levels.js.
 
-const VTOP = 4, VBOT = 17;
-// Board size in blocks. Classic and Zen use a half-size grid (11 × 18) so their blocks are drawn twice as big.
+const VTOP = 4, VBOT = 17; // pile shape on the full-size board; scaled for the half-size one
+// Board size in blocks. Levels use the full 22 × 36; the other modes use a half-size grid (11 × 18) so their blocks are drawn twice as big.
 let COLS = 22, ROWS = 36;
 // effects (popups, shake) are sized to the board, not the block, so they look the same at any block size
 const fxUnit = () => COLS * cell / 22;
@@ -116,11 +116,12 @@ function placeIn(row, v) {
 function buildBoard(crackTop, width, seg) {
   grid = [];
   shaft = { c: (COLS >> 1) - (width > 1 ? 1 : 0), seg: 0, width, min: seg[0], max: seg[1] };
-  for (let r = 0; r < VTOP; r++) grid.push(new Array(COLS).fill(0));
+  const vtop = Math.round(VTOP * ROWS / 36);
+  for (let r = 0; r < vtop; r++) grid.push(new Array(COLS).fill(0));
   let wl = 1, wr = 1;
-  const maxW = (COLS - 6) >> 1; // leaves a 6-wide opening at the bottom of the V
-  for (let r = VTOP; r < crackTop; r++) {
-    const t = (r - VTOP) / Math.max(1, crackTop - 1 - VTOP);
+  const maxW = (COLS - Math.round(COLS * 6 / 22)) >> 1; // leaves an opening at the bottom of the V: 6 wide, or 4 on the half-size board
+  for (let r = vtop; r < crackTop; r++) {
+    const t = (r - vtop) / Math.max(1, crackTop - 1 - vtop);
     const base = 1 + t * (maxW - 1);
     wl = Math.min(maxW, Math.max(wl, Math.round(base + rng() * 1.6 - 0.8)));
     wr = Math.min(maxW, Math.max(wr, Math.round(base + rng() * 1.6 - 0.8)));
@@ -781,7 +782,7 @@ const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15
 function startGame(m, li = -1) {
   initAudio();
   mode = m; levelIdx = li;
-  m === 'classic' || m === 'zen' ? setBoardSize(11, 18) : setBoardSize(22, 36);
+  m === 'level' ? setBoardSize(22, 36) : setBoardSize(11, 18);
   if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
   else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
   else if (m === 'zen') R = { ...ZEN };
@@ -791,7 +792,7 @@ function startGame(m, li = -1) {
       refill: false, stackOutEnds: true, grow: L.grow || 0, fog: !!L.fog, dusk: !!L.dusk };
   }
   rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + today())) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
-  if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(VBOT, 1, [1, 4]);
+  if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(Math.round(VBOT * ROWS / 36), 1, [1, 4]);
   bag = []; nextKey = takeKey(); holdKey = null;
   particles = []; popups = []; flashes = []; shakeT = 0;
   score = 0; lines = 0; combo = -1; b2b = false; growT = 0;
