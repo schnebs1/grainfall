@@ -25,7 +25,7 @@ const PIECES = Object.keys(SHAPES);
 const shapeOf = key => key === 'AXE' ? [[1]] : SHAPES[key];
 
 // Classic difficulty. Speeds are seconds per row: start at grav, ramp faster every 8 rows, floor at minGrav.
-// gold / knot: chance a fresh row carries one; axe: chance a piece is an axe; low: rows of wood Classic starts with.
+// gold / knot: chance a row carries one (Classic: its starting rows; Daily: every row that rises); axe: chance a piece is an axe; low: rows of wood Classic starts with.
 // Classic is endless and has no clock; time is the Daily board's clock (Daily plays by Normal).
 const DIFFS = {
   easy:   { name: 'Easy',   time: 240, grav: 1.0,  ramp: 0.04, minGrav: 0.2,  ghost: true,  mult: 1,   gold: 0.1,  knot: 0.02, axe: 0.03,  low: 2, note: 'Slow pieces that speed up gently, landing guide.' },
@@ -56,6 +56,15 @@ let SAVE = freshSave();
   if (saved && typeof saved === 'object') {
     const d = freshSave();
     SAVE = { ...d, ...saved, stats: { ...d.stats, ...saved.stats }, daily: { ...d.daily, ...saved.daily }, settings: { ...d.settings, ...saved.settings } };
+    // a damaged or future save shouldn't stop the game: anything of the wrong shape goes back to its default
+    const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+    for (const k of ['best', 'top']) if (!isObj(SAVE[k])) SAVE[k] = d[k];
+    for (const k of ['stars', 'levelBest', 'woodsSeen']) if (!Array.isArray(SAVE[k])) SAVE[k] = d[k];
+    for (const k in SAVE.top) if (!Array.isArray(SAVE.top[k])) delete SAVE.top[k];
+    if (!DIFFS[SAVE.diff]) SAVE.diff = d.diff;
+    if (!WOODS[SAVE.wood]) SAVE.wood = d.wood;
+    if (!DRAG[SAVE.settings.drag]) SAVE.settings.drag = d.settings.drag;
+    if (!(SAVE.unlocked >= 1)) SAVE.unlocked = 1;
     // high-score lists came later: start each Classic list with the best score saved before them
     if (!saved.top) for (const k of Object.keys(DIFFS)) if (SAVE.best['classic-' + k]) SAVE.top['classic-' + k] = [{ s: SAVE.best['classic-' + k], d: '' }];
     return;
@@ -75,7 +84,8 @@ function persist() {
 // ---------- dates and seeds (daily board) ----------
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const today = () => ymd(new Date());
-const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return ymd(d); };
+const dayBefore = t => { const d = new Date(t + 'T12:00'); d.setDate(d.getDate() - 1); return ymd(d); };
+const yesterday = () => dayBefore(today());
 const seedOf = str => { let h = 2166136261; for (const ch of str) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; };
 const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
@@ -83,7 +93,7 @@ const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imu
 let grid, piece, nextKey, bag = [], score = 0, timeLeft = 0, state = 'menu', dropAcc = 0, lockT = 0, lockResets = 0, clearT = 0;
 let particles = [], popups = [], flashes = [], shakeT = 0, shakeAmp = 0, clearRows = [];
 let holdKey = null, canHold = true, combo = -1, b2b = false, lines = 0, growT = 0;
-let mode = 'classic', levelIdx = -1;
+let mode = 'classic', levelIdx = -1, dailyDate = '';
 let R = { ...DIFFS.normal, timer: 180, refill: true, stackOutEnds: true }; // rules for the current game
 let shaft; // crack generator: column, width and rows left in the current straight run
 let cell = 20, dpr = 1, sprites = [], special = {}, bgCanvas;
@@ -194,7 +204,7 @@ function tryMove(dx, dy) {
   return true;
 }
 function tryRotate(dir) {
-  if (!piece) return;
+  if (!piece || state !== 'play') return;
   const m = rotate(piece.m, dir);
   for (const k of [0, -1, 1, -2, 2]) {
     if (!collide(m, piece.x + k, piece.y)) {
@@ -216,7 +226,7 @@ function holdPiece() {
 }
 const landingY = () => { let y = piece.y; while (!collide(piece.m, piece.x, y + 1)) y++; return y; };
 function hardDrop() {
-  if (!piece) return;
+  if (!piece || state !== 'play') return;
   const y = landingY();
   score += (y - piece.y);
   piece.y = y;
@@ -229,6 +239,8 @@ function lock() {
   for (let i = 0; i < m.length; i++) for (let j = 0; j < m.length; j++)
     if (m[i][j] && y + i >= 0) { grid[y + i][x + j] = v; cells.push([y + i, x + j]); }
   piece = null;
+  // part of the piece is stuck above the board: that's a top-out
+  if (m.some((row, i) => y + i < 0 && row.some(Boolean))) { R.stackOutEnds ? finish('stacked') : zenReset(); return; }
   if (v === AXE) {
     // the axe splits the row it lands on and the two below
     const rows = [y, y + 1, y + 2].filter(r => r >= 0 && r < ROWS);
@@ -739,9 +751,10 @@ function note(text, ms = 4000) {
 }
 
 // ---------- progress: daily streak, stars, wood unlocks ----------
-function recordDaily(sc) {
-  const d = SAVE.daily, t = today();
-  if (d.last !== t) { d.streak = d.last === yesterday() ? d.streak + 1 : 1; d.last = t; }
+// t is the board's date, so a game that runs past midnight counts for the day it started
+function recordDaily(sc, t = today()) {
+  const d = SAVE.daily;
+  if (d.last !== t) { d.streak = d.last === dayBefore(t) ? d.streak + 1 : 1; d.last = t; }
   d.bestStreak = Math.max(d.bestStreak, d.streak);
   if (d.date !== t) { d.date = t; d.best = 0; }
   const isBest = sc > d.best;
@@ -768,9 +781,9 @@ function newUnlocks() {
 }
 const levelTotal = () => SAVE.levelBest.reduce((a, s) => a + (s || 0), 0);
 // keep the five best scores for a mode; returns this score's place on the list (1 is a new best), or 0
-function addTop(key, s) {
+function addTop(key, s, d = today()) {
   if (!s) return 0;
-  const list = SAVE.top[key] ||= [], e = { s, d: today() };
+  const list = SAVE.top[key] ||= [], e = { s, d };
   list.push(e); list.sort((a, b) => b.s - a.s); list.length = Math.min(list.length, 5);
   return list.indexOf(e) + 1;
 }
@@ -791,7 +804,8 @@ function startGame(m, li = -1) {
     R = { timer: L.time, grav: L.grav ?? 0.8, ramp: 0.05, minGrav: L.minGrav ?? 0.25, ghost: L.ghost ?? true, mult: 1, gold: 0, knot: 0, axe: L.axe,
       refill: false, stackOutEnds: true, grow: L.grow || 0, fog: !!L.fog, dusk: !!L.dusk };
   }
-  rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + today())) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
+  dailyDate = today();
+  rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + dailyDate)) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
   if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(24, 1, [1, 4], 14); // Daily: the pile starts in the lower part of the board
   bag = []; nextKey = takeKey(); holdKey = null;
   particles = []; popups = []; flashes = []; shakeT = 0;
@@ -849,7 +863,7 @@ function finish(kind) {
       main = ['Retry', () => startGame('level', levelIdx)];
     }
   } else if (mode === 'daily') {
-    const isBest = recordDaily(score), place = addTop('daily', score);
+    const isBest = recordDaily(score, dailyDate), place = addTop('daily', score, dailyDate);
     const st = SAVE.daily.streak;
     title = kind === 'stacked' ? 'Stacked out' : "Time's up";
     detail = `Daily board · ${lines} rows · ${st}-day streak` + (isBest ? ' · Best today!' : ` · Today's best ${fmt(SAVE.daily.best)}`) + (place ? `\n${placeText(place)} daily score` : '');
@@ -880,7 +894,7 @@ function finish(kind) {
   hud();
 }
 function setPaused(p) {
-  if (p && (state === 'play' || state === 'clearing')) { state = 'paused:' + state; showScreen('paused'); persist(); }
+  if (p && (state === 'play' || state === 'clearing')) { touch = null; softDrop = false; state = 'paused:' + state; showScreen('paused'); persist(); }
   else if (!p && state.startsWith('paused:')) { state = state.slice(7); showScreen(null); last = performance.now(); }
 }
 function quitToMenu() {
@@ -971,7 +985,7 @@ function renderStats() {
   const rows = [
     ['Games played', st.games], ['Rows cleared', st.rows], ['Tetrises', st.tetrises], ['Best combo', st.bestCombo ? '×' + st.bestCombo : '–'],
     ['Gold blocks', st.golds], ['Knots broken', st.knots], ['Axes swung', st.axes],
-    ['Level stars', `${totalStars()} / ${LEVELS.length * 3}`], ['Daily streak', `${d.streak} (best ${d.bestStreak})`],
+    ['Level stars', `${totalStars()} / ${LEVELS.length * 3}`], ['Daily streak', `${d.last === today() || d.last === yesterday() ? d.streak : 0} (best ${d.bestStreak})`],
   ];
   $('statList').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${typeof v === 'number' ? v.toLocaleString() : v}</dd>`).join('');
 }
@@ -1006,8 +1020,10 @@ const syncSound = () => { $('soundBtn').textContent = SAVE.settings.sound ? 'Sou
 
 let last = performance.now(), softDrop = false;
 function loop(now) {
+  requestAnimationFrame(loop); // first, so an error in one frame can't stop the game
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if ((state === 'play' || state === 'clearing') && R.timer) {
+  // the clock holds during the short clear animation, so clearing the last gold at the buzzer still wins
+  if (state === 'play' && R.timer) {
     timeLeft -= dt;
     if (timeLeft <= 0) { timeLeft = 0; finish('time'); }
   }
@@ -1025,7 +1041,6 @@ function loop(now) {
   }
   stepParticles(dt); stepFx(dt); musicTick();
   draw(); hud();
-  requestAnimationFrame(loop);
 }
 
 // ---------- input ----------
@@ -1055,7 +1070,7 @@ wrap.addEventListener('pointerdown', e => {
   touch = { id: e.pointerId, sx: e.clientX, sy: e.clientY, t: performance.now(), lastY: e.clientY, lastT: performance.now(), movedX: 0, dropped: 0, moved: false };
 });
 wrap.addEventListener('pointermove', e => {
-  if (!touch || e.pointerId !== touch.id || !piece) return;
+  if (!touch || e.pointerId !== touch.id || !piece || state !== 'play') return;
   const step = Math.max(cell, 14) * DRAG[SAVE.settings.drag];
   const wantX = Math.round((e.clientX - touch.sx) / step);
   let moved = false;

@@ -90,7 +90,7 @@ function tuneEvents(tune) {
 }
 
 let mus = { tune: '', ev: [], len: 0, idx: 0, out: null, bb: 0, tb: 0, rain: null, drip: 0 }, pulse, rainBuf;
-const musicChoice = () => SAVE.settings.music ?? 'a';
+const musicChoice = () => { const c = SAVE.settings.music; return c === 'off' || TUNES[c] ? c : 'a'; };
 
 // The menu plays it too; a game starts the tune from the top. Paused and results screens are quiet.
 // Called every frame: starts, stops and schedules notes a little ahead of the audio clock.
