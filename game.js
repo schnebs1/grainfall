@@ -16,13 +16,14 @@ const PIECES = Object.keys(SHAPES);
 const shapeOf = key => key === 'AXE' ? [[1]] : SHAPES[key];
 
 // Classic difficulty. Speeds are seconds per row: start at grav, ramp faster every 8 rows, floor at minGrav.
-// gold / knot: chance a fresh row carries one; axe: chance a piece is an axe.
+// gold / knot: chance a fresh row carries one; axe: chance a piece is an axe; low: rows of wood Classic starts with.
+// Classic is endless and has no clock; time is the Daily board's clock (Daily plays by Normal).
 const DIFFS = {
-  easy:   { name: 'Easy',   time: 240, grav: 1.0,  ramp: 0.04, minGrav: 0.2,  ghost: true,  mult: 1,   gold: 0.1,  knot: 0.02, axe: 0.03,  note: '4 minutes, slow pieces, landing guide.' },
-  normal: { name: 'Normal', time: 180, grav: 0.75, ramp: 0.06, minGrav: 0.1,  ghost: true,  mult: 1.5, gold: 0.08, knot: 0.04, axe: 0.025, note: '3 minutes, steady speed-up. Points ×1.5.' },
-  hard:   { name: 'Hard',   time: 120, grav: 0.45, ramp: 0.07, minGrav: 0.05, ghost: false, mult: 2,   gold: 0.07, knot: 0.07, axe: 0.02,  note: '2 minutes, fast pieces, more knots, no landing guide. Points ×2.' },
+  easy:   { name: 'Easy',   time: 240, grav: 1.0,  ramp: 0.04, minGrav: 0.2,  ghost: true,  mult: 1,   gold: 0.1,  knot: 0.02, axe: 0.03,  low: 3, note: 'Slow pieces that speed up gently, landing guide.' },
+  normal: { name: 'Normal', time: 180, grav: 0.75, ramp: 0.06, minGrav: 0.1,  ghost: true,  mult: 1.5, gold: 0.08, knot: 0.04, axe: 0.025, low: 4, note: 'Steady speed-up. Points ×1.5.' },
+  hard:   { name: 'Hard',   time: 120, grav: 0.45, ramp: 0.07, minGrav: 0.05, ghost: false, mult: 2,   gold: 0.07, knot: 0.07, axe: 0.02,  low: 6, note: 'Fast pieces, more knots, no landing guide. Points ×2.' },
 };
-const ZEN = { timer: 0, grav: 1.1, ramp: 0, minGrav: 1.1, ghost: true, mult: 1, gold: 0.08, knot: 0, axe: 0.04, refill: true, stackOutEnds: false };
+const ZEN = { timer: 0, grav: 1.1, ramp: 0, minGrav: 1.1, ghost: true, mult: 1, gold: 0.15, knot: 0, axe: 0.04, low: 3, refill: false, stackOutEnds: false };
 const DRAG = { slow: 1.4, normal: 1, fast: 0.7 };
 
 const $ = id => document.getElementById(id);
@@ -121,6 +122,19 @@ function buildBoard(crackTop, width, seg) {
     grid.push(row);
   }
   for (let r = crackTop; r < ROWS; r++) grid.push(genRow());
+}
+// Classic and Zen start from the floor: a few low rows of wood, each with gaps to fill.
+function lowBoard(n) {
+  grid = [];
+  for (let r = 0; r < ROWS - n; r++) grid.push(new Array(COLS).fill(0));
+  for (let k = 0; k < n; k++) grid.push(lowRow());
+}
+function lowRow() {
+  const row = Array.from({ length: COLS }, randV);
+  for (let h = 2 + rnd(2); h > 0; h--) row[rnd(COLS)] = 0;
+  if (R.gold && rng() < R.gold * 2) placeIn(row, GOLD);
+  if (R.knot && rng() < R.knot * 2) placeIn(row, KNOT);
+  return row;
 }
 function levelBoard(L) {
   const crackTop = ROWS - 2 - L.depth, deepest = crackTop + L.depth - 1;
@@ -261,7 +275,10 @@ function clearRowsNow(full, axe) {
   let pts = axe ? 300 : [0, 100, 300, 500, 800][n];
   if (b2bHit) pts *= 1.5;
   pts = Math.round((pts + 50 * combo + golds * 250 + kegs * 150) * R.mult);
+  const g0 = gravity();
   score += pts; lines += full.length;
+  if (mode === 'classic' && gravity() < g0) // pieces just got faster
+    popups.push({ text: 'Faster!', size: 1.3, color: '#ffb35c', x: COLS * cell / 2, y: cell * 6, t: 0.3, life: 1.2 });
   const st = SAVE.stats;
   st.rows += full.length; st.golds += golds; st.knots += knots;
   if (tetris) st.tetrises++;
@@ -299,6 +316,13 @@ function finishClear() {
   for (let k = 0; k < clearRows.length; k++) R.refill ? grid.push(genRow()) : grid.unshift(new Array(COLS).fill(0));
   state = 'play';
   if (mode === 'level' && !countCells(GOLD)) { finish('won'); return; }
+  // Zen: a cleared board gets a fresh low layer so there's always something to fill
+  if (mode === 'zen' && !grid.some(r => r.some(Boolean))) {
+    grid.splice(0, R.low);
+    for (let k = 0; k < R.low; k++) grid.push(lowRow());
+    popups.push({ text: 'Fresh layer', size: 1.5, color: '#fff1d6', x: COLS * cell / 2, y: ROWS * cell * 0.6, t: 0, life: 1.6 });
+    chime(392, 0, 0.15, 1.2); chime(523, 0.15, 0.13, 1.2);
+  }
   spawn();
 }
 // Zen never ends: a stacked-out board blows away and a fresh one is laid down.
@@ -306,7 +330,7 @@ function zenReset() {
   piece = null;
   if (!reduceMotion) for (let r = 0; r < ROWS / 2; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] && Math.random() < 0.5)
     particles.push({ v: grid[r][c], x: (c + 0.5) * cell, y: (r + 0.5) * cell, vx: (Math.random() - 0.5) * 20 * cell, vy: -(8 + Math.random() * 14) * cell, a: 0, va: (Math.random() - 0.5) * 12, s: 0.85 });
-  buildBoard(VBOT, 1, [1, 4]);
+  lowBoard(R.low);
   popups.push({ text: 'Fresh boards', size: 1.6, color: '#fff1d6', x: COLS * cell / 2, y: ROWS * cell * 0.3, t: 0, life: 1.6 });
   chime(262, 0, 0.18, 1.2); chime(392, 0.15, 0.15, 1.2);
   spawn();
@@ -680,7 +704,7 @@ const TUT = [
   { key: 'move', text: 'Drag left or right to slide the piece.' },
   { key: 'rotate', text: 'Tap the board to turn it.' },
   { key: 'drop', text: 'Flick down, or press Drop, to send it down.' },
-  { key: 'clear', text: 'Fill the crack to complete rows. Full rows break and add time.' },
+  { key: 'clear', text: 'Fill the gaps to complete rows. Full rows break apart.' },
 ];
 let tutStep = -1, bannerTimer;
 function showBanner(text, skippable) {
@@ -748,17 +772,16 @@ const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15
 function startGame(m, li = -1) {
   initAudio();
   mode = m; levelIdx = li;
-  if (m === 'classic' || m === 'daily') {
-    const D = DIFFS[m === 'daily' ? 'normal' : SAVE.diff];
-    R = { ...D, timer: D.time, refill: true, stackOutEnds: true };
-  } else if (m === 'zen') R = { ...ZEN };
+  if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
+  else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
+  else if (m === 'zen') R = { ...ZEN };
   else {
     const L = LEVELS[li];
     R = { timer: L.time, grav: L.grav ?? 0.8, ramp: 0.05, minGrav: L.minGrav ?? 0.25, ghost: L.ghost ?? true, mult: 1, gold: 0, knot: 0, axe: L.axe,
       refill: false, stackOutEnds: true, grow: L.grow || 0, fog: !!L.fog, dusk: !!L.dusk };
   }
   rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + today())) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
-  if (m === 'level') levelBoard(LEVELS[li]); else buildBoard(VBOT, 1, [1, 4]);
+  if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(VBOT, 1, [1, 4]);
   bag = []; nextKey = takeKey(); holdKey = null;
   particles = []; popups = []; flashes = []; shakeT = 0;
   score = 0; lines = 0; combo = -1; b2b = false; growT = 0;
