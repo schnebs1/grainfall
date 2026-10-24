@@ -2,7 +2,7 @@
 // Wood drawing lives in wood.js and the dig levels in levels.js.
 
 const VTOP = 4, VBOT = 17;
-// Board size in blocks. Classic uses a half-size grid (11 × 18) so its blocks are drawn twice as big.
+// Board size in blocks. Classic and Zen use a half-size grid (11 × 18) so their blocks are drawn twice as big.
 let COLS = 22, ROWS = 36;
 // effects (popups, shake) are sized to the board, not the block, so they look the same at any block size
 const fxUnit = () => COLS * cell / 22;
@@ -32,7 +32,7 @@ const DIFFS = {
   normal: { name: 'Normal', time: 180, grav: 0.75, ramp: 0.06, minGrav: 0.1,  ghost: true,  mult: 1.5, gold: 0.08, knot: 0.04, axe: 0.025, low: 3, note: 'Steady speed-up. Points ×1.5.' },
   hard:   { name: 'Hard',   time: 120, grav: 0.45, ramp: 0.07, minGrav: 0.05, ghost: false, mult: 2,   gold: 0.07, knot: 0.07, axe: 0.02,  low: 4, note: 'Fast pieces, more knots, no landing guide. Points ×2.' },
 };
-const ZEN = { timer: 0, grav: 1.1, ramp: 0, minGrav: 1.1, ghost: true, mult: 1, gold: 0.15, knot: 0, axe: 0.04, low: 3, refill: false, stackOutEnds: false };
+const ZEN = { timer: 0, grav: 1.1, ramp: 0, minGrav: 1.1, ghost: true, mult: 1, gold: 0.15, knot: 0, axe: 0.04, low: 2, refill: false, stackOutEnds: false };
 const DRAG = { slow: 1.4, normal: 1, fast: 0.7 };
 
 const $ = id => document.getElementById(id);
@@ -781,7 +781,7 @@ const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15
 function startGame(m, li = -1) {
   initAudio();
   mode = m; levelIdx = li;
-  m === 'classic' ? setBoardSize(11, 18) : setBoardSize(22, 36);
+  m === 'classic' || m === 'zen' ? setBoardSize(11, 18) : setBoardSize(22, 36);
   if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
   else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
   else if (m === 'zen') R = { ...ZEN };
