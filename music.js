@@ -28,18 +28,30 @@ const TUNES = {
         bass: 'A2 F2 C3 G2 A2 F2/G2 G2 C3', repeat: 1 },
     ],
   },
-  c: {
-    name: 'Rainwood', bpm: 72, calm: true,
-    parts: [
-      { lead: 'F#5:1.5 E5:.5 D5:2 | R:1 B4:1 D5:1 E5:1 | D5:1.5 B4:.5 A4:2 | R:2 A4:1 B4:1 |' +
-              'A5:1.5 F#5:.5 E5:2 | R:1 D5:1 E5:1 F#5:1 | E5:1.5 D5:.5 B4:1 A4:1 | A4:4',
-        bass: 'D3 B2m G2 A2 D3 B2m G2 A2', repeat: 2 },
-      { lead: 'B5:2 A5:1 F#5:1 | E5:3 R:1 | F#5:1 E5:1 C#5:1 A4:1 | B4:3 R:1 |' +
-              'D5:1 E5:1 G5:1 F#5:1 | E5:2 A4:2 | F#5:1.5 E5:.5 D5:1 A4:1 | D5:4',
-        bass: 'G2 A2 F#2m B2m G2 A2 D3 D3', repeat: 1 },
-    ],
-  },
+  c: { name: 'Rainwood', bpm: 72, calm: true, parts: [] }, // parts below
 };
+
+// Rainwood wanders through five sections (about three minutes) before it loops: the theme, a variation, a lift,
+// a minor-key verse and a quiet stretch that's mostly rain, then the theme and lift again.
+// arp picks the accompaniment: up (rolling), wide (octave leaps) or sparse (two notes a bar).
+{
+  const theme = { lead: 'F#5:1.5 E5:.5 D5:2 | R:1 B4:1 D5:1 E5:1 | D5:1.5 B4:.5 A4:2 | R:2 A4:1 B4:1 |' +
+                        'A5:1.5 F#5:.5 E5:2 | R:1 D5:1 E5:1 F#5:1 | E5:1.5 D5:.5 B4:1 A4:1 | A4:4',
+                  bass: 'D3 B2m G2 A2 D3 B2m G2 A2', arp: 'up', repeat: 1 };
+  const variation = { lead: 'A5:1.5 F#5:.5 E5:1 D5:1 | F#5:2 D5:1 B4:1 | B4:1 D5:1 G5:1.5 F#5:.5 | E5:2 R:1 C#5:1 |' +
+                            'D5:.5 E5:.5 F#5:1 A5:1 B5:1 | A5:2 F#5:1 D5:1 | G5:1 F#5:1 E5:1 D5:1 | E5:2 A4:2',
+                      bass: 'D3 B2m G2 A2 D3 B2m G2 A2', arp: 'wide', repeat: 1 };
+  const lift = { lead: 'B5:2 A5:1 F#5:1 | E5:3 R:1 | F#5:1 E5:1 C#5:1 A4:1 | B4:3 R:1 |' +
+                       'D5:1 E5:1 G5:1 F#5:1 | E5:2 A4:2 | F#5:1.5 E5:.5 D5:1 A4:1 | D5:4',
+                 bass: 'G2 A2 F#2m B2m G2 A2 D3 D3', arp: 'up', repeat: 1 };
+  const verse = { lead: 'D5:2 F#5:1 E5:1 | D5:1 B4:1 R:2 | A4:1.5 D5:.5 F#5:2 | E5:3 R:1 |' +
+                        'D5:1 E5:1 F#5:1 A5:1 | G5:2 F#5:1 D5:1 | E5:1 G5:1 F#5:1 E5:1 | E5:2 C#5:2',
+                  bass: 'B2m G2 D3 A2 B2m G2 E2m A2', arp: 'wide', repeat: 1 };
+  const hush = { lead: 'R:4 | R:2 A5:2 | R:4 | F#5:2 E5:2 | R:4 | D5:2 B4:2 | R:4 | A4:4',
+                 bass: 'D3 G2 D3 A2 D3 G2 E2m A2', arp: 'sparse', repeat: 1 };
+  TUNES.c.parts = [theme, variation, lift, verse, hush, theme, lift];
+}
+const ARPS = { up: [0, 7, 12, 16, 19, 16, 12, 7], wide: [0, 12, 19, 24, 16, 19, 12, 7], sparse: [0, null, null, null, 16, null, null, null] };
 
 const midi = name => {
   const [, l, acc, oct] = name.match(/([A-G])(#|b)?(\d)/);
@@ -59,9 +71,10 @@ function tuneEvents(tune) {
       b += +d;
     }
     if (tune.calm) part.bass.split(' ').forEach((ch, bar) => {
-      const root = midi(ch), up = ch.endsWith('m') ? [0, 7, 12, 15, 19, 15, 12, 7] : [0, 7, 12, 16, 19, 16, 12, 7];
+      const root = midi(ch), minor = ch.endsWith('m'); // 16 in a pattern is the third, flattened for a minor chord
       ev.push({ b: start + bar * 4, d: 4, v: 'pad', f: hz(root) });
-      up.forEach((iv, k) => ev.push({ b: start + bar * 4 + k / 2, d: 1.5, v: 'arp', f: hz(root + 12 + iv) }));
+      ARPS[part.arp].forEach((iv, k) => iv !== null &&
+        ev.push({ b: start + bar * 4 + k / 2, d: part.arp === 'sparse' ? 3 : 1.5, v: 'arp', f: hz(root + 12 + (minor && iv === 16 ? 15 : iv)) }));
     });
     else part.bass.split(' ').forEach((roots, bar) => {
       const rs = roots.split('/');
@@ -91,7 +104,7 @@ function musicTick() {
     mus.bb = mus.ev[mus.idx].b; mus.tb = actx.currentTime + 0.05;
     if (TUNES[mus.tune].calm) startRain();
   }
-  if (mus.rain && actx.currentTime + 0.15 > mus.drip) { drip(mus.drip); mus.drip += 0.3 + Math.random() * 1.4; }
+  if (mus.rain && actx.currentTime + 0.15 > mus.drip) { drip(mus.drip); mus.drip += 0.6 + Math.random() * 2; }
   // hurry up when the clock is nearly out, like the old games did when the stack got high
   const spb = 60 / (TUNES[mus.tune].bpm * (playing && R.timer && timeLeft <= 20 && !TUNES[mus.tune].calm ? 1.3 : 1));
   while (true) {
@@ -124,8 +137,13 @@ function startRain() {
   const hiss = actx.createBiquadFilter(); hiss.type = 'bandpass'; hiss.frequency.value = 2500; hiss.Q.value = 0.6;
   const low = actx.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 400;
   const gh = actx.createGain(), gl = actx.createGain();
-  gh.gain.setValueAtTime(0, actx.currentTime); gh.gain.linearRampToValueAtTime(0.035, actx.currentTime + 2);
-  gl.gain.setValueAtTime(0, actx.currentTime); gl.gain.linearRampToValueAtTime(0.06, actx.currentTime + 2);
+  gh.gain.setValueAtTime(0, actx.currentTime); gh.gain.linearRampToValueAtTime(0.014, actx.currentTime + 2);
+  gl.gain.setValueAtTime(0, actx.currentTime); gl.gain.linearRampToValueAtTime(0.024, actx.currentTime + 2);
+  // the shower comes and goes a little, over about half a minute
+  const swell = actx.createOscillator(), depth = actx.createGain();
+  swell.frequency.value = 0.035; depth.gain.value = 0.006;
+  swell.connect(depth); depth.connect(gh.gain); depth.connect(gl.gain);
+  swell.start(); src.onended = () => swell.stop();
   src.connect(hiss).connect(gh).connect(mus.out);
   src.connect(low).connect(gl).connect(mus.out);
   src.start();
@@ -136,7 +154,7 @@ function drip(t) {
   const o = actx.createOscillator(), g = actx.createGain(), f = 1400 + Math.random() * 1800;
   o.type = 'sine';
   o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 0.06);
-  g.gain.setValueAtTime(0.012 + Math.random() * 0.02, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
+  g.gain.setValueAtTime(0.005 + Math.random() * 0.009, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
   o.connect(g).connect(mus.out); o.start(t); o.stop(t + 0.1);
 }
 // calm voices: a mallet note (sine plus a quickly fading overtone), a soft held root and a quiet plucked arpeggio
