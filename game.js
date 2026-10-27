@@ -170,6 +170,33 @@ function levelBoard(L) {
     placeIn(grid[pool[rnd(pool.length)]], v);
   }
 }
+// Cut the plain wood in rows r0 and below into four-block groups (the Tetris shapes) and give each one wood, so a board
+// reads as pieces that fell there. Cells that can't make four are left as smaller bits. Cosmetic: never touches rng.
+function cutPieces(r0 = 0) {
+  const mix = woodMix(), n = mix.length, free = new Set();
+  for (let r = r0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] && grid[r][c] <= VARIANTS) free.add(r * COLS + c);
+  const near = k => [k % COLS ? k - 1 : -1, (k + 1) % COLS ? k + 1 : -1, k - COLS, k + COLS].filter(x => x >= 0 && x < ROWS * COLS);
+  // cells with the fewest free neighbours go first, so few are stranded; a little noise varies the shapes
+  const cost = k => near(k).filter(x => free.has(x)).length + Math.random() * 0.9;
+  const lowest = ks => { let best, bc = Infinity; for (const k of ks) { const c = cost(k); if (c < bc) { best = k; bc = c; } } return best; };
+  while (free.size) {
+    const group = [lowest([...free])];
+    free.delete(group[0]);
+    while (group.length < 4) {
+      const opts = [...new Set(group.flatMap(near))].filter(x => free.has(x));
+      if (!opts.length) break;
+      const k = lowest(opts);
+      group.push(k); free.delete(k);
+    }
+    // a wood none of the touching pieces has, if there is one
+    const used = new Set(group.flatMap(near).filter(x => !free.has(x) && !group.includes(x)).map(x => grid[x / COLS | 0][x % COLS])
+      .filter(v => v && v <= VARIANTS).map(v => (v - 1) % n));
+    const woods = mix.map((_, i) => i).filter(i => !used.has(i)), pool = woods.length ? woods : mix.map((_, i) => i);
+    const w = pool[Math.floor(Math.random() * pool.length)];
+    const v = 1 + w + n * Math.floor(Math.random() * Math.floor((VARIANTS - 1 - w) / n + 1));
+    for (const k of group) grid[k / COLS | 0][k % COLS] = v;
+  }
+}
 const countCells = v => grid.reduce((a, row) => a + row.filter(x => x === v).length, 0);
 
 // ---------- pieces ----------
@@ -326,7 +353,7 @@ function amberBonus(rows, n) {
 // Growth: a new crack row pushes the whole board up from below.
 function grow() {
   if (grid[0].some(Boolean)) { finish('stacked'); return; }
-  grid.shift(); grid.push(genRow());
+  grid.shift(); grid.push(genRow()); cutPieces(ROWS - 1);
   if (piece && collide(piece.m, piece.x, piece.y)) piece.y--;
   if (piece && collide(piece.m, piece.x, piece.y)) { finish('stacked'); return; }
   knock(95, 0.35); haptic('soft');
@@ -335,12 +362,14 @@ function finishClear() {
   for (const r of clearRows.slice().sort((a, b) => b - a)) grid.splice(r, 1);
   // endless modes: the board rises from below with fresh crack rows; levels: rows above fall in, so you dig down
   for (let k = 0; k < clearRows.length; k++) R.refill ? grid.push(genRow()) : grid.unshift(new Array(COLS).fill(0));
+  if (R.refill) cutPieces(ROWS - clearRows.length);
   state = 'play';
   if (mode === 'level' && !countCells(GOLD)) { finish('won'); return; }
   // Zen: a cleared board gets a fresh low layer so there's always something to fill
   if (mode === 'zen' && !grid.some(r => r.some(Boolean))) {
     grid.splice(0, R.low);
     for (let k = 0; k < R.low; k++) grid.push(lowRow());
+    cutPieces(ROWS - R.low);
     popups.push({ text: 'Fresh layer', size: 1.5, color: '#fff1d6', x: COLS * cell / 2, y: ROWS * cell * 0.6, t: 0, life: 1.6 });
     chime(392, 0, 0.15, 1.2); chime(523, 0.15, 0.13, 1.2);
   }
@@ -351,7 +380,7 @@ function zenReset() {
   piece = null;
   if (!reduceMotion) for (let r = 0; r < ROWS / 2; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] && Math.random() < 0.5)
     particles.push({ v: grid[r][c], x: (c + 0.5) * cell, y: (r + 0.5) * cell, vx: (Math.random() - 0.5) * 20 * cell, vy: -(8 + Math.random() * 14) * cell, a: 0, va: (Math.random() - 0.5) * 12, s: 0.85 });
-  lowBoard(R.low);
+  lowBoard(R.low); cutPieces();
   popups.push({ text: 'Fresh boards', size: 1.6, color: '#fff1d6', x: COLS * cell / 2, y: ROWS * cell * 0.3, t: 0, life: 1.6 });
   chime(262, 0, 0.18, 1.2); chime(392, 0.15, 0.15, 1.2);
   spawn();
@@ -808,6 +837,7 @@ function startGame(m, li = -1) {
   dailyDate = today();
   rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + dailyDate)) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
   if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(24, 1, [1, 4], 14); // Daily: the pile starts in the lower part of the board
+  cutPieces();
   bag = []; nextKey = takeKey(); nextV = randV(); holdKey = null; buildSprites();
   particles = []; popups = []; flashes = []; shakeT = 0;
   score = 0; lines = 0; combo = -1; b2b = false; growT = 0;
@@ -967,7 +997,7 @@ function renderWoods() {
     btn.onclick = () => {
       if (on && woodMix().length === 1) return; // keep at least one wood
       SAVE.woodsOff = on ? [...SAVE.woodsOff, k] : SAVE.woodsOff.filter(w => w !== k);
-      persist(); buildSprites(); drawLogo(); drawNext(); renderWoods();
+      persist(); cutPieces(); buildSprites(); drawLogo(); drawNext(); renderWoods();
     };
     grid.append(btn);
   }
@@ -1134,7 +1164,7 @@ addEventListener('touchend', initAudio, { once: true });
 if (location.protocol === 'https:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // a board sits behind the menu from the first frame
-buildBoard(VBOT, 1, [1, 4]); nextKey = takeKey(); nextV = randV();
+buildBoard(VBOT, 1, [1, 4]); cutPieces(); nextKey = takeKey(); nextV = randV();
 resize(); hudLabels(); hud();
 showScreen('menu');
 document.fonts.load('40px "Lilita One"').then(drawLogo, () => {});
