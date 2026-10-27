@@ -60,6 +60,7 @@ for (let n = 13; n <= 100; n++) {
     grav: +(0.8 - ch * 0.035).toFixed(3), minGrav: +(0.25 - ch * 0.012).toFixed(3), ghost: n < 91,
     tip: INTROS[n],
   };
+  if (n === 93) L.kegs = 4; // Kauri played too hard with one keg
   if (n === 100) Object.assign(L, { ambers: 2, kegs: 2, irons: 4, grow: 10, fog: false, dusk: true, tip: 'The last tree. Everything at once.' });
   L.axe = L.irons ? 0.045 : 0.03;
   const t = 60 + depth * 10 + L.knots * 4 + L.irons * 8 + (L.grow ? depth * 3 : 0) + (L.dusk ? 15 : 0);
