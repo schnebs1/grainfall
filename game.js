@@ -11,7 +11,7 @@ function setBoardSize(cols, rows) {
   COLS = cols; ROWS = rows;
   resize();
 }
-const VARIANTS = 10, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood
+const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
   O: [[1,1],[1,1]],
@@ -44,7 +44,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ---------- saved progress ----------
 // The iPhone app injects window.__grainfallSave and stores writes natively; a browser falls back to localStorage.
 const freshSave = () => ({
-  v: 1, diff: 'normal', wood: 'maple', best: {}, stars: [], levelBest: [], top: {}, unlocked: 1, woodsSeen: ['maple'], tutorialDone: false,
+  v: 1, diff: 'normal', woodsOff: [], best: {}, stars: [], levelBest: [], top: {}, unlocked: 1, woodsSeen: ['maple'], tutorialDone: false,
   stats: { games: 0, rows: 0, tetrises: 0, bestCombo: 0, golds: 0, knots: 0, axes: 0 },
   daily: { last: '', streak: 0, bestStreak: 0, date: '', best: 0 },
   settings: { drag: 'normal', haptics: true, sound: true },
@@ -59,10 +59,9 @@ let SAVE = freshSave();
     // a damaged or future save shouldn't stop the game: anything of the wrong shape goes back to its default
     const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
     for (const k of ['best', 'top']) if (!isObj(SAVE[k])) SAVE[k] = d[k];
-    for (const k of ['stars', 'levelBest', 'woodsSeen']) if (!Array.isArray(SAVE[k])) SAVE[k] = d[k];
+    for (const k of ['stars', 'levelBest', 'woodsSeen', 'woodsOff']) if (!Array.isArray(SAVE[k])) SAVE[k] = d[k];
     for (const k in SAVE.top) if (!Array.isArray(SAVE.top[k])) delete SAVE.top[k];
     if (!DIFFS[SAVE.diff]) SAVE.diff = d.diff;
-    if (!WOODS[SAVE.wood]) SAVE.wood = d.wood;
     if (!DRAG[SAVE.settings.drag]) SAVE.settings.drag = d.settings.drag;
     if (!(SAVE.unlocked >= 1)) SAVE.unlocked = 1;
     // high-score lists came later: start each Classic list with the best score saved before them
@@ -92,7 +91,7 @@ const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imu
 // ---------- game state ----------
 let grid, piece, nextKey, bag = [], score = 0, timeLeft = 0, state = 'menu', dropAcc = 0, lockT = 0, lockResets = 0, clearT = 0;
 let particles = [], popups = [], flashes = [], shakeT = 0, shakeAmp = 0, clearRows = [];
-let holdKey = null, canHold = true, combo = -1, b2b = false, lines = 0, growT = 0;
+let nextV = 1, holdV = 1, holdKey = null, canHold = true, combo = -1, b2b = false, lines = 0, growT = 0;
 let mode = 'classic', levelIdx = -1, dailyDate = '';
 let R = { ...DIFFS.normal, timer: 180, refill: true, stackOutEnds: true }; // rules for the current game
 let shaft; // crack generator: column, width and rows left in the current straight run
@@ -189,10 +188,10 @@ function collide(m, x, y) {
   }
   return false;
 }
-function spawn(key) {
-  if (!key) { key = nextKey; nextKey = takeKey(); }
+function spawn(key, v) {
+  if (!key) { key = nextKey; v = nextV; nextKey = takeKey(); nextV = randV(); }
   const m = shapeOf(key).map(r => r.slice());
-  piece = { key, m, v: key === 'AXE' ? AXE : randV(), x: (COLS - m.length) >> 1, y: 0 };
+  piece = { key, m, v: key === 'AXE' ? AXE : v, x: (COLS - m.length) >> 1, y: 0 };
   dropAcc = 0; lockT = 0; lockResets = 0; canHold = true;
   drawNext();
   if (collide(piece.m, piece.x, piece.y)) R.stackOutEnds ? finish('stacked') : zenReset();
@@ -218,9 +217,9 @@ function tryRotate(dir) {
 // swap the falling piece into the hold tray (once per piece)
 function holdPiece() {
   if (state !== 'play' || !piece || !canHold) return;
-  const cur = piece.key;
-  spawn(holdKey || undefined);
-  holdKey = cur; canHold = false;
+  const cur = piece.key, curV = piece.v;
+  spawn(holdKey || undefined, holdV);
+  holdKey = cur; holdV = curV; canHold = false;
   sfx(0.3, 0.7); haptic('light');
   drawNext();
 }
@@ -443,8 +442,8 @@ function drawFx() {
 
 // ---------- rendering ----------
 function buildSprites() {
-  const wood = WOODS[SAVE.wood] || WOODS.maple;
-  sprites = Array.from({ length: VARIANTS }, () => makeSprite(cell, wood));
+  const mix = woodMix(), wood = WOODS[mix[0]];
+  sprites = Array.from({ length: VARIANTS }, (_, i) => makeSprite(cell, WOODS[mix[i % mix.length]]));
   special = { [GOLD]: makeSprite(cell, wood, 'gold'), [KNOT]: makeSprite(cell, wood, 'knot'), [CRACKED]: makeSprite(cell, wood, 'cracked'), [AXE]: makeSprite(cell, WOODS.oak, 'axe'),
     [AMBER]: makeSprite(cell, wood, 'amber'), [KEG]: makeSprite(cell, wood, 'keg'), [IRON]: makeSprite(cell, wood, 'iron') };
 }
@@ -540,16 +539,16 @@ function drawLogo() {
 }
 function drawNext() {
   const fog = R.fog && state !== 'menu';
-  drawMini(nctx, fog ? null : nextKey);
+  drawMini(nctx, fog ? null : nextKey, nextV);
   if (fog) {
     const s = +nextC.dataset.s;
     nctx.fillStyle = 'rgba(255,241,214,.55)'; nctx.font = `${s * 1.6}px "Lilita One", sans-serif`;
     nctx.textAlign = 'center'; nctx.textBaseline = 'middle'; nctx.fillText('?', s * 2, s * 1.05);
   }
-  drawMini(hctx, holdKey);
+  drawMini(hctx, holdKey, holdV);
   $('holdTray').classList.toggle('used', !canHold);
 }
-function drawMini(g, key) {
+function drawMini(g, key, v) {
   const s = +nextC.dataset.s;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, s * 4, s * 2);
@@ -558,7 +557,7 @@ function drawMini(g, key) {
   const firsts = m.map(r => r.indexOf(1)).filter(i => i >= 0);
   const minJ = Math.min(...firsts), w = Math.max(...m.map(r => r.lastIndexOf(1) + 1)) - minJ;
   const ox = (4 - w) * s / 2, oy = (2 - m.length) * s / 2;
-  const img = key === 'AXE' ? special[AXE] : sprites[0];
+  const img = key === 'AXE' ? special[AXE] : spriteOf(v);
   m.forEach((row, i) => row.forEach((v, j) => v && g.drawImage(img, ox + (j - minJ) * s, oy + i * s, s, s)));
 }
 // Dusk: darkness over the board with a lantern on the falling piece, a dimmer one where it will land, and gold glinting.
@@ -774,6 +773,8 @@ const WOOD_RULES = {
   olive:  { need: 'Finish level 100, The Great Tree',     prog: () => [SAVE.stars[99] ? 1 : 0, 1] },
 };
 const woodUnlocked = k => { const [a, b] = WOOD_RULES[k].prog(); return a >= b; };
+// every unlocked wood the player hasn't left out in the Workshop; each piece is cut from one of them
+const woodMix = () => { const m = Object.keys(WOODS).filter(k => woodUnlocked(k) && !SAVE.woodsOff.includes(k)); return m.length ? m : ['maple']; };
 function newUnlocks() {
   const fresh = Object.keys(WOODS).filter(k => woodUnlocked(k) && !SAVE.woodsSeen.includes(k));
   SAVE.woodsSeen.push(...fresh);
@@ -807,7 +808,7 @@ function startGame(m, li = -1) {
   dailyDate = today();
   rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + dailyDate)) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
   if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(24, 1, [1, 4], 14); // Daily: the pile starts in the lower part of the board
-  bag = []; nextKey = takeKey(); holdKey = null;
+  bag = []; nextKey = takeKey(); nextV = randV(); holdKey = null; buildSprites();
   particles = []; popups = []; flashes = []; shakeT = 0;
   score = 0; lines = 0; combo = -1; b2b = false; growT = 0;
   restartMusic();
@@ -885,7 +886,7 @@ function finish(kind) {
   $('overStars').hidden = mode !== 'level' || kind !== 'won';
   $('overStars').innerHTML = [1, 2, 3].map(i => `<span class="${i <= stars ? 'on' : ''}">★</span>`).join('');
   $('overU').hidden = !fresh.length;
-  $('overU').textContent = fresh.length ? `New wood unlocked: ${fresh.map(k => WOODS[k].name).join(', ')}. Pick it in the Workshop.` : '';
+  $('overU').textContent = fresh.length ? `New wood unlocked: ${fresh.map(k => WOODS[k].name).join(', ')}. It's in the mix from your next game.` : '';
   $('overMain').textContent = main[0];
   $('overAlt').hidden = !alt;
   if (alt) $('overAlt').textContent = alt[0];
@@ -952,7 +953,8 @@ function renderWoods() {
     const ok = woodUnlocked(k), [a, b] = WOOD_RULES[k].prog();
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'wood' + (ok ? '' : ' locked');
-    btn.setAttribute('aria-pressed', SAVE.wood === k);
+    const on = ok && !SAVE.woodsOff.includes(k);
+    btn.setAttribute('aria-pressed', on);
     if (!ok) btn.disabled = true;
     const sw = document.createElement('canvas'), z = 26;
     sw.width = sw.height = z * 2 * dpr; sw.style.width = sw.style.height = z * 2 + 'px';
@@ -960,9 +962,13 @@ function renderWoods() {
     for (let i = 0; i < 4; i++) g.drawImage(makeSprite(z, WOODS[k]), (i % 2) * z * dpr, (i >> 1) * z * dpr, z * dpr, z * dpr);
     const name = document.createElement('b'); name.textContent = WOODS[k].name;
     const need = document.createElement('small');
-    need.textContent = ok ? (SAVE.wood === k ? 'In use' : 'Tap to use') : `${WOOD_RULES[k].need} (${Math.min(a, b).toLocaleString()}/${b.toLocaleString()})`;
+    need.textContent = ok ? (on ? 'In the mix' : 'Left out') : `${WOOD_RULES[k].need} (${Math.min(a, b).toLocaleString()}/${b.toLocaleString()})`;
     btn.append(sw, name, need);
-    btn.onclick = () => { SAVE.wood = k; persist(); buildSprites(); drawLogo(); drawNext(); renderWoods(); };
+    btn.onclick = () => {
+      if (on && woodMix().length === 1) return; // keep at least one wood
+      SAVE.woodsOff = on ? [...SAVE.woodsOff, k] : SAVE.woodsOff.filter(w => w !== k);
+      persist(); buildSprites(); drawLogo(); drawNext(); renderWoods();
+    };
     grid.append(btn);
   }
 }
@@ -1128,7 +1134,7 @@ addEventListener('touchend', initAudio, { once: true });
 if (location.protocol === 'https:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // a board sits behind the menu from the first frame
-buildBoard(VBOT, 1, [1, 4]); nextKey = takeKey();
+buildBoard(VBOT, 1, [1, 4]); nextKey = takeKey(); nextV = randV();
 resize(); hudLabels(); hud();
 showScreen('menu');
 document.fonts.load('40px "Lilita One"').then(drawLogo, () => {});
