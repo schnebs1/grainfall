@@ -1008,7 +1008,7 @@ function renderSettings() {
     el.oninput = () => { s[key] = el.value / 100; fill(); initAudio(); applyVolumes(); };
     el.onchange = () => { persist(); if (key === 'sfxVol') sfx(0.5, 1); };
   }
-  segment('sndSeg', s.sound ? 'on' : 'off', v => { s.sound = v === 'on'; persist(); renderSettings(); syncSound(); initAudio(); sfx(0.5, 1); });
+  segment('sndSeg', s.sound ? 'on' : 'off', v => { s.sound = v === 'on'; persist(); renderSettings(); initAudio(); sfx(0.5, 1); });
 }
 function setDiff(d) {
   SAVE.diff = d; persist();
@@ -1016,7 +1016,6 @@ function setDiff(d) {
   const best = SAVE.best['classic-' + d] || 0;
   $('diffNote').textContent = DIFFS[d].note + (best ? ` Best: ${best}.` : '');
 }
-const syncSound = () => { $('soundBtn').textContent = SAVE.settings.sound ? 'Sound' : 'Muted'; };
 
 let last = performance.now(), softDrop = false;
 function loop(now) {
@@ -1120,7 +1119,6 @@ $('holdBtn').onclick = holdPiece;
 $('holdTray').onclick = holdPiece;
 $('dropBtn').onclick = () => state === 'play' && hardDrop();
 $('pauseBtn').onclick = () => setPaused(!state.startsWith('paused'));
-$('soundBtn').onclick = () => { SAVE.settings.sound = !SAVE.settings.sound; persist(); syncSound(); initAudio(); };
 document.addEventListener('visibilitychange', () => { if (document.hidden) { setPaused(true); persist(); } });
 addEventListener('resize', resize);
 // browsers only allow sound after a tap; Safari wants it on the tap's end
@@ -1131,7 +1129,7 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) navigator.se
 
 // a board sits behind the menu from the first frame
 buildBoard(VBOT, 1, [1, 4]); nextKey = takeKey();
-resize(); syncSound(); hudLabels(); hud();
+resize(); hudLabels(); hud();
 showScreen('menu');
 document.fonts.load('40px "Lilita One"').then(drawLogo, () => {});
 requestAnimationFrame(loop);
