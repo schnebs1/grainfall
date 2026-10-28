@@ -13,7 +13,7 @@ function setBoardSize(cols, rows) {
 }
 // Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
 // second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
-const VERSION = '1.00.01';
+const VERSION = '1.00.02';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -1165,6 +1165,12 @@ addEventListener('resize', resize);
 addEventListener('pointerdown', initAudio, { once: true });
 addEventListener('touchend', initAudio, { once: true });
 // the web version works offline once loaded (the iPhone app loads from its own bundle and skips this)
+// Safari drags the whole page (pulling it down off the screen) from anywhere that isn't a scrolling list, so a slow tap that
+// slides a little could hide the controls. Only screens with more than fits (Levels, Scores) may scroll.
+document.addEventListener('touchmove', e => {
+  const list = e.target.closest?.('.overlay');
+  if (!list || list.scrollHeight <= list.clientHeight) e.preventDefault();
+}, { passive: false });
 document.addEventListener('gesturestart', e => e.preventDefault()); // Safari's pinch zoom, which touch-action doesn't always stop
 // Safari can still zoom on a quick double tap: cancel the second tap and press its button ourselves, since cancelling drops the click
 let lastTap = 0;

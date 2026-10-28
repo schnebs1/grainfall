@@ -1,6 +1,6 @@
 // Offline support for the web version: serve from the cache straight away, and refresh the cache in the
 // background so the next launch picks up any update.
-const CACHE = 'grainfall-2eb856952e';
+const CACHE = 'grainfall-d5f7f025f0';
 self.addEventListener('install', e => {
   // cache: 'reload' skips the browser's HTTP cache, so a new version never gets filled with old copies
   const files = ['./', 'index.html', 'wood.js', 'levels.js', 'music.js', 'game.js',
