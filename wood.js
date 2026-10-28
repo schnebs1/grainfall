@@ -6,10 +6,10 @@ const WOODS = {
   maple:  { name: 'Maple',  h: [27, 34], s: [52, 68], l: [63, 73] },
   birch:  { name: 'Birch',  h: [36, 44], s: [36, 50], l: [74, 82] },
   oak:    { name: 'Oak',    h: [30, 36], s: [42, 54], l: [52, 60] },
-  cherry: { name: 'Cherry', h: [10, 17], s: [48, 60], l: [48, 56] },
+  cherry: { name: 'Cherry', h: [4, 10],  s: [52, 64], l: [57, 65] },
   walnut: { name: 'Walnut', h: [20, 27], s: [30, 42], l: [32, 40], light: true },
   ebony:  { name: 'Ebony',  h: [18, 26], s: [8, 16],  l: [15, 21], light: true },
-  redwood: { name: 'Redwood', h: [8, 14],  s: [55, 68], l: [38, 46] },
+  redwood: { name: 'Redwood', h: [13, 19], s: [58, 70], l: [30, 37] },
   olive:  { name: 'Olive',  h: [40, 48], s: [28, 40], l: [58, 68] },
 };
 
