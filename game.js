@@ -1161,6 +1161,7 @@ addEventListener('resize', resize);
 addEventListener('pointerdown', initAudio, { once: true });
 addEventListener('touchend', initAudio, { once: true });
 // the web version works offline once loaded (the iPhone app loads from its own bundle and skips this)
+document.addEventListener('gesturestart', e => e.preventDefault()); // Safari's pinch zoom, which touch-action doesn't always stop
 if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
   // an update lands while the old copy is already showing: reload into it, unless a game is under way
   const had = !!navigator.serviceWorker.controller;
