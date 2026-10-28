@@ -1161,7 +1161,15 @@ addEventListener('resize', resize);
 addEventListener('pointerdown', initAudio, { once: true });
 addEventListener('touchend', initAudio, { once: true });
 // the web version works offline once loaded (the iPhone app loads from its own bundle and skips this)
-if (location.protocol === 'https:' && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
+  // an update lands while the old copy is already showing: reload into it, unless a game is under way
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && state === 'menu') location.reload(); });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // a Home Screen app is often resumed rather than relaunched, so look for an update each time it comes back
+    document.addEventListener('visibilitychange', () => document.hidden || reg.update().catch(() => {}));
+  }).catch(() => {});
+}
 
 // a board sits behind the menu from the first frame
 buildBoard(VBOT, 1, [1, 4]); cutPieces(); nextKey = takeKey(); nextV = randV();
