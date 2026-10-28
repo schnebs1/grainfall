@@ -85,6 +85,7 @@ body {
 .overlay h1 { line-height: 0; }
 #logo { display: block; }
 .overlay h2 { font-size: clamp(30px, 8vw, 42px); }
+#ver { font-size: 12px; opacity: .6; }
 .overlay p { margin: 0; max-width: 30ch; font-weight: 600; line-height: 1.45; color: var(--sand); }
 .overlay .big { font-family: var(--display); font-size: 40px; color: #ffd28a; font-variant-numeric: tabular-nums; }
 button {
@@ -243,6 +244,7 @@ button:disabled { cursor: default; }
           <div class="seg" id="sndSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div>
         </div>
         <button id="tutAgain" class="small" type="button">Show the tutorial again</button>
+        <p id="ver"></p>
         <button class="back link" type="button">Back</button>
       </div>
 

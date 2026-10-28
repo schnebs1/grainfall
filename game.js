@@ -11,6 +11,9 @@ function setBoardSize(cols, rows) {
   COLS = cols; ROWS = rows;
   resize();
 }
+// Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
+// second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
+const VERSION = '1.00.00';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -1150,6 +1153,7 @@ $('resume').onclick = () => setPaused(false);
 $('restart').onclick = () => startGame(mode, levelIdx);
 $('quit').onclick = quitToMenu;
 $('tutSkip').onclick = endTut;
+$('ver').textContent = 'Version ' + VERSION;
 $('tutAgain').onclick = () => { SAVE.tutorialDone = false; persist(); $('tutAgain').textContent = 'Tutorial will show next game'; };
 $('holdBtn').onclick = holdPiece;
 $('holdTray').onclick = holdPiece;
