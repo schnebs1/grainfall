@@ -13,7 +13,7 @@ function setBoardSize(cols, rows) {
 }
 // Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
 // second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
-const VERSION = '1.00.00';
+const VERSION = '1.00.01';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -1166,6 +1166,12 @@ addEventListener('pointerdown', initAudio, { once: true });
 addEventListener('touchend', initAudio, { once: true });
 // the web version works offline once loaded (the iPhone app loads from its own bundle and skips this)
 document.addEventListener('gesturestart', e => e.preventDefault()); // Safari's pinch zoom, which touch-action doesn't always stop
+// Safari can still zoom on a quick double tap: cancel the second tap and press its button ourselves, since cancelling drops the click
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+  if (e.timeStamp - lastTap < 350 && e.cancelable) { e.preventDefault(); e.target.closest?.('button, #holdTray')?.click(); }
+  lastTap = e.timeStamp;
+}, { passive: false });
 if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
   // an update lands while the old copy is already showing: reload into it, unless a game is under way
   const had = !!navigator.serviceWorker.controller;

@@ -29,7 +29,8 @@
   --body: "Nunito", ui-rounded, system-ui, sans-serif;
   color-scheme: dark;
 }
-html, body { height: 100%; touch-action: pan-x pan-y; } /* no double-tap or pinch zoom: Safari ignores user-scalable=no */
+html, body { height: 100%; touch-action: pan-x pan-y; }
+* { touch-action: manipulation; } /* no double-tap or pinch zoom: Safari ignores user-scalable=no */
 [hidden] { display: none !important; }
 body {
   background: var(--bg);
