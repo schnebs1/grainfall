@@ -13,7 +13,7 @@ function setBoardSize(cols, rows) {
 }
 // Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
 // second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
-const VERSION = '1.00.03';
+const VERSION = '1.00.04';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -501,6 +501,9 @@ function paintPageWood() {
   document.body.style.backgroundSize = `${W}px ${H}px`;
 }
 function resize() {
+  // before the first resize the Next/Hold canvases are the browser's default 300x150, which would make the top bar
+  // measure far too tall and shrink the board; give them their usual height first
+  for (const c of [nextC, holdC]) if (!c.style.height) c.style.height = '28px';
   const bar = $('bar').offsetHeight + 6, hud = $('hud').offsetHeight + 3;
   const app = $('app');
   cell = Math.max(8, Math.floor(Math.min(app.clientWidth / COLS, (app.clientHeight - bar - hud - 4) / ROWS) * 4) / 4);
