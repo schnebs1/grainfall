@@ -15,7 +15,7 @@ function setBoardSize(cols, rows) {
 }
 // Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
 // second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
-const VERSION = '1.01.00';
+const VERSION = '1.01.01';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -541,6 +541,7 @@ function resize() {
   paintPageWood();
   drawLogo();
   drawNext();
+  hintScreens();
 }
 // Title wordmark: maple-grain letters, dark carved edge and extrusion; the "i" is dotted with a falling cube.
 function drawLogo() {
@@ -996,7 +997,13 @@ function showScreen(id) {
   if (id === 'woods') renderWoods();
   if (id === 'stats') renderStats();
   if (id === 'settings') renderSettings();
+  hintScreens();
 }
+// hint while the screen's last item (its Back button) is still below the visible part
+const moreHint = o => o.classList.toggle('more', o.lastElementChild.getBoundingClientRect().bottom > o.getBoundingClientRect().bottom + 1);
+const hintScreens = () => { for (const s of SCREENS) if (!$(s).hidden) moreHint($(s)); };
+for (const s of SCREENS) $(s).addEventListener('scroll', e => moreHint(e.currentTarget), { passive: true });
+document.fonts?.ready.then(hintScreens); // text set in the fallback font runs taller
 function refreshMenu() {
   $('mLevelsSub').textContent = `Dig down to the gold · ${totalStars()} of ${LEVELS.length * 3} stars`;
   const d = rec().daily, t = today();

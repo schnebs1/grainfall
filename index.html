@@ -144,6 +144,13 @@ button:disabled { cursor: default; }
 #statList dt { font-size: 14px; font-weight: 700; color: var(--sand); align-self: center; }
 #statList dd { margin: 0; font-family: var(--display); color: #ffd28a; font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
 .set { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--sand); font-weight: 800; }
+.pair { display: flex; gap: 18px; justify-content: center; }
+.pair input[type=range] { width: 130px; }
+#settings { gap: 10px; }
+#sizeNote { font-weight: 600; font-size: 12px; opacity: .8; }
+/* a screen with more below than fits: a hint pinned to the bottom until it's scrolled to the end */
+.overlay.more::after { content: 'Scroll for more ▾'; position: sticky; bottom: -16px; flex: none; box-sizing: border-box; height: 50px; margin: -50px -16px -16px; padding-top: 22px; align-self: stretch;
+  background: linear-gradient(transparent, rgba(20,8,2,.95) 55%); color: #ffd28a; font: 15px var(--display); pointer-events: none; }
 #overStars { font-size: 44px; letter-spacing: 6px; color: rgba(255,210,138,.22); line-height: 1; }
 #overStars .on { color: var(--gold); text-shadow: 0 0 14px rgba(255,200,80,.6); }
 .overlay p.unlock { background: rgba(255,210,120,.16); border-radius: 10px; padding: 8px 12px; color: #ffe2a8; }
@@ -233,20 +240,24 @@ button:disabled { cursor: default; }
         <div class="set">Drag speed
           <div class="seg" id="dragSeg"><button type="button" data-v="slow">Slow</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="fast">Fast</button></div>
         </div>
-        <div class="set">Vibration
-          <div class="seg" id="hapSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div>
+        <div class="pair">
+          <div class="set">Vibration
+            <div class="seg" id="hapSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div>
+          </div>
+          <div class="set">Sound
+            <div class="seg" id="sndSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div>
+          </div>
         </div>
         <div class="set">Music
           <div class="seg" id="musSeg"><button type="button" data-v="a">Tune A</button><button type="button" data-v="b">Tune B</button><button type="button" data-v="c">Rain</button><button type="button" data-v="off">Off</button></div>
         </div>
-        <label class="set">Music volume <input type="range" id="musVol" min="0" max="100" step="5"></label>
-        <label class="set">Effects volume <input type="range" id="sfxVol" min="0" max="100" step="5"></label>
+        <div class="pair">
+          <label class="set">Music volume <input type="range" id="musVol" min="0" max="100" step="5"></label>
+          <label class="set">Effects volume <input type="range" id="sfxVol" min="0" max="100" step="5"></label>
+        </div>
         <div class="set">Block size
           <div class="seg" id="sizeSeg"><button type="button" data-v="small">Small</button><button type="button" data-v="large">Large</button></div>
-          <small id="sizeNote">For every mode, from your next game. Each size keeps its own stars and scores.</small>
-        </div>
-        <div class="set">Sound
-          <div class="seg" id="sndSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div>
+          <small id="sizeNote">Every mode, from your next game. Each size keeps its own scores.</small>
         </div>
         <button id="tutAgain" class="small" type="button">Show the tutorial again</button>
         <p id="ver"></p>
