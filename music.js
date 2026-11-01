@@ -7,29 +7,51 @@
 // lead: "Note:beats" per bar, bars split by '|', R is a rest. bass: one root per bar, or two ("F2/G2") for half bars;
 // in a calm tune a root ending in m ("B2m") is a minor chord.
 const TUNES = {
-  a: {
-    name: 'Korobeiniki', bpm: 150,
-    parts: [
-      { lead: 'E5:1 B4:.5 C5:.5 D5:1 C5:.5 B4:.5 | A4:1 A4:.5 C5:.5 E5:1 D5:.5 C5:.5 | B4:1.5 C5:.5 D5:1 E5:1 | C5:1 A4:1 A4:1 R:1 |' +
-              'R:.5 D5:1 F5:.5 A5:1 G5:.5 F5:.5 | E5:1.5 C5:.5 E5:1 D5:.5 C5:.5 | B4:1 B4:.5 C5:.5 D5:1 E5:1 | C5:1 A4:1 A4:1 R:1',
-        bass: 'E2 A2 E2 A2 D2 C2 E2 A2', repeat: 2 },
-      { lead: 'E5:2 C5:2 | D5:2 B4:2 | C5:2 A4:2 | G#4:2 B4:2 | E5:2 C5:2 | D5:2 B4:2 | C5:1 E5:1 A5:2 | G#5:4',
-        bass: 'A2 E2 A2 E2 A2 E2 A2 E2', repeat: 1 },
-    ],
-  },
-  b: {
-    name: 'Sawdust', bpm: 140,
-    parts: [
-      { lead: 'G5:.5 E5:.5 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 | E5:1 C5:.5 A4:.5 G4:1 R:1 | A4:.5 C5:.5 F5:1 E5:.5 D5:.5 C5:.5 A4:.5 | B4:1 G4:1 D5:1 B4:1 |' +
-              'G5:.5 E5:.5 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 | E5:1 G5:.5 A5:.5 G5:1 E5:1 | F5:.5 E5:.5 D5:.5 C5:.5 D5:1 G4:1 | C5:2 R:2',
-        bass: 'C3 A2 F2 G2 C3 A2 F2/G2 C3', repeat: 2 },
-      { lead: 'A5:1 G5:.5 E5:.5 A5:1 G5:.5 E5:.5 | F5:1 E5:.5 D5:.5 C5:1 D5:1 | E5:1 D5:.5 C5:.5 E5:1 D5:.5 C5:.5 | D5:1 B4:1 G4:2 |' +
-              'A5:1 G5:.5 E5:.5 A5:1 G5:.5 E5:.5 | F5:.5 G5:.5 A5:1 B5:1 C6:1 | B5:1 G5:1 D5:1 B4:1 | C6:2 R:2',
-        bass: 'A2 F2 C3 G2 A2 F2/G2 G2 C3', repeat: 1 },
-    ],
-  },
+  a: { name: 'Korobeiniki', bpm: 150, parts: [] }, // parts below
+  b: { name: 'Sawdust', bpm: 140, parts: [] },
   c: { name: 'Rainwood', bpm: 72, calm: true, parts: [] }, // parts below
 };
+
+// Tunes A and B run about two minutes before they loop: the main part, the answer, the main part in running eighths,
+// a new middle section and its variation, the answer again, then home.
+{
+  const main = { lead: 'E5:1 B4:.5 C5:.5 D5:1 C5:.5 B4:.5 | A4:1 A4:.5 C5:.5 E5:1 D5:.5 C5:.5 | B4:1.5 C5:.5 D5:1 E5:1 | C5:1 A4:1 A4:1 R:1 |' +
+                       'R:.5 D5:1 F5:.5 A5:1 G5:.5 F5:.5 | E5:1.5 C5:.5 E5:1 D5:.5 C5:.5 | B4:1 B4:.5 C5:.5 D5:1 E5:1 | C5:1 A4:1 A4:1 R:1',
+                 bass: 'E2 A2 E2 A2 D2 C2 E2 A2' };
+  const answer = { lead: 'E5:2 C5:2 | D5:2 B4:2 | C5:2 A4:2 | G#4:2 B4:2 | E5:2 C5:2 | D5:2 B4:2 | C5:1 E5:1 A5:2 | G#5:4',
+                   bass: 'A2 E2 A2 E2 A2 E2 A2 E2' };
+  const runs = { lead: 'E5:.5 B4:.5 E5:.5 G#5:.5 B5:1 G#5:.5 E5:.5 | A5:.5 E5:.5 C5:.5 E5:.5 A5:1 G#5:.5 F5:.5 | E5:.5 F5:.5 E5:.5 D5:.5 B4:1 G#4:1 | A4:.5 C5:.5 E5:.5 A5:.5 E5:1 R:1 |' +
+                       'D5:.5 F5:.5 A5:.5 F5:.5 D6:1 A5:1 | C6:.5 G5:.5 E5:.5 G5:.5 C6:1 B5:.5 A5:.5 | G#5:.5 E5:.5 B4:.5 E5:.5 G#5:1 B5:1 | A5:2 E5:1 A4:1',
+                 bass: 'E2 A2 E2 A2 D2 C2 E2 A2' };
+  const middle = { lead: 'A5:1.5 G5:.5 F5:1 C5:1 | D5:1.5 E5:.5 F5:1 G5:1 | E5:2 C5:1 G4:1 | A4:2 R:1 E5:1 |' +
+                         'F5:1.5 E5:.5 D5:1 C5:1 | B4:1 C5:1 D5:1 G5:1 | G#5:2 E5:1 D5:1 | E5:3 R:1',
+                   bass: 'F2 G2 C3 A2 F2 G2 E2 E2' };
+  const middle2 = { lead: 'C6:1.5 A5:.5 F5:1 A5:1 | B5:1.5 G5:.5 D5:1 G5:1 | C6:1 G5:1 E5:1 G5:1 | A5:2 E5:2 |' +
+                          'F5:1 E5:1 D5:1 F5:1 | E5:1 D5:.5 C5:.5 B4:1 G#4:1 | A4:1 C5:1 E5:1 A5:1 | A5:3 R:1',
+                    bass: 'F2 G2 C3 A2 D2 E2 A2 A2' };
+  const answer2 = { lead: 'E5:.5 A5:.5 E5:.5 C5:.5 A4:1 C5:1 | D5:.5 G#5:.5 D5:.5 B4:.5 G#4:1 B4:1 | C5:.5 E5:.5 A5:.5 E5:.5 C5:1 A4:1 | G#4:.5 B4:.5 E5:.5 B4:.5 G#4:2 |' +
+                          'E5:.5 A5:.5 C6:.5 A5:.5 E5:1 C5:1 | D5:.5 G#5:.5 B5:.5 G#5:.5 D5:1 B4:1 | C5:1 E5:1 A5:1 C6:1 | B5:2 G#5:2',
+                    bass: 'A2 E2 A2 E2 A2 E2 A2 E2' };
+  TUNES.a.parts = [main, main, answer, runs, middle, middle2, answer2, answer, main, runs];
+}
+{
+  const main = { lead: 'G5:.5 E5:.5 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 | E5:1 C5:.5 A4:.5 G4:1 R:1 | A4:.5 C5:.5 F5:1 E5:.5 D5:.5 C5:.5 A4:.5 | B4:1 G4:1 D5:1 B4:1 |' +
+                       'G5:.5 E5:.5 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 | E5:1 G5:.5 A5:.5 G5:1 E5:1 | F5:.5 E5:.5 D5:.5 C5:.5 D5:1 G4:1 | C5:2 R:2',
+                 bass: 'C3 A2 F2 G2 C3 A2 F2/G2 C3' };
+  const answer = { lead: 'A5:1 G5:.5 E5:.5 A5:1 G5:.5 E5:.5 | F5:1 E5:.5 D5:.5 C5:1 D5:1 | E5:1 D5:.5 C5:.5 E5:1 D5:.5 C5:.5 | D5:1 B4:1 G4:2 |' +
+                         'A5:1 G5:.5 E5:.5 A5:1 G5:.5 E5:.5 | F5:.5 G5:.5 A5:1 B5:1 C6:1 | B5:1 G5:1 D5:1 B4:1 | C6:2 R:2',
+                   bass: 'A2 F2 C3 G2 A2 F2/G2 G2 C3' };
+  const runs = { lead: 'C5:.5 E5:.5 G5:.5 C6:.5 G5:1 E5:1 | A5:.5 E5:.5 C5:.5 E5:.5 A5:1 R:1 | F5:.5 A5:.5 C6:.5 A5:.5 F5:1 C5:1 | G5:.5 B5:.5 D6:.5 B5:.5 G5:2 |' +
+                       'E5:.5 G5:.5 C6:.5 G5:.5 E5:1 C5:1 | C5:.5 E5:.5 A5:.5 E5:.5 C6:2 | A5:.5 G5:.5 F5:.5 A5:.5 G5:.5 F5:.5 D5:1 | C5:1 G4:1 C5:2',
+                 bass: 'C3 A2 F2 G2 C3 A2 F2/G2 C3' };
+  const middle = { lead: 'E5:1.5 C5:.5 A4:1 E5:1 | D5:1 B4:1 G#4:2 | A4:.5 C5:.5 F5:1 E5:1 D5:1 | E5:1.5 D5:.5 C5:1 G4:1 |' +
+                         'F5:1 E5:.5 D5:.5 A4:1 D5:1 | B4:1 D5:1 G#5:1 E5:1 | A5:1.5 G5:.5 E5:1 C5:1 | D5:1 B4:1 G4:2',
+                   bass: 'A2 E2 F2 C3 D2 E2 A2 G2' };
+  const middle2 = { lead: 'C6:1 B5:.5 A5:.5 E5:1 A5:1 | G#5:1 E5:.5 B4:.5 E5:2 | F5:.5 A5:.5 C6:.5 A5:.5 F5:1 E5:1 | G5:.5 E5:.5 C5:.5 E5:.5 G5:2 |' +
+                          'F5:.5 A5:.5 D6:1 C6:.5 A5:.5 F5:1 | D5:.5 G5:.5 B5:1 A5:.5 G5:.5 F5:1 | E5:1 G5:1 C6:1 G5:1 | C6:2 R:2',
+                    bass: 'A2 E2 F2 C3 D2 G2 C3 C3' };
+  TUNES.b.parts = [main, main, answer, runs, middle, middle2, answer, main];
+}
 
 // Rainwood wanders through five sections (about three minutes) before it loops: the theme, a variation, a lift,
 // a minor-key verse and a quiet stretch that's mostly rain, then the theme and lift again.
@@ -63,7 +85,7 @@ const hz = m => 440 * Math.pow(2, (m - 69) / 12);
 function tuneEvents(tune) {
   const ev = [];
   let b = 0;
-  for (const part of tune.parts) for (let rep = 0; rep < part.repeat; rep++) {
+  for (const part of tune.parts) for (let rep = 0; rep < (part.repeat || 1); rep++) {
     const start = b;
     for (const tok of part.lead.replace(/\|/g, ' ').split(/\s+/).filter(Boolean)) {
       const [n, d] = tok.split(':');
