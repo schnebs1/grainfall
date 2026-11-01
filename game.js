@@ -2,7 +2,9 @@
 // Wood drawing lives in wood.js and the dig levels in levels.js.
 
 const VTOP = 4, VBOT = 17; // pile shape on the full-size board; scaled for the half-size one
-// Board size in blocks. Levels and Daily use the full 22 × 36; Classic and Zen use a half-size grid (11 × 18) so their blocks are drawn twice as big.
+// Board size in blocks, from the Block size setting: small blocks on the full 22 × 36 board, or large blocks on a half-size
+// 11 × 18 board (each block drawn twice as big). Levels are designed for the full board and scaled down for the half one.
+const SIZES = { small: [22, 36], large: [11, 18] };
 let COLS = 22, ROWS = 36;
 // effects (popups, shake) are sized to the board, not the block, so they look the same at any block size
 const fxUnit = () => COLS * cell / 22;
@@ -13,7 +15,7 @@ function setBoardSize(cols, rows) {
 }
 // Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
 // second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
-const VERSION = '1.00.04';
+const VERSION = '1.01.00';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -46,11 +48,12 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- saved progress ----------
 // The iPhone app injects window.__grainfallSave and stores writes natively; a browser falls back to localStorage.
+// Stars, scores and the daily streak are kept per block size: small-block records at the top level, large in `large`.
+const freshRecords = () => ({ best: {}, stars: [], levelBest: [], top: {}, unlocked: 1, daily: { last: '', streak: 0, bestStreak: 0, date: '', best: 0 } });
 const freshSave = () => ({
-  v: 1, diff: 'normal', woodsOff: [], best: {}, stars: [], levelBest: [], top: {}, unlocked: 1, woodsSeen: ['maple'], tutorialDone: false,
+  v: 1, diff: 'normal', woodsOff: [], ...freshRecords(), large: freshRecords(), woodsSeen: ['maple'], tutorialDone: false,
   stats: { games: 0, rows: 0, tetrises: 0, bestCombo: 0, golds: 0, knots: 0, axes: 0 },
-  daily: { last: '', streak: 0, bestStreak: 0, date: '', best: 0 },
-  settings: { drag: 'normal', haptics: true, sound: true },
+  settings: { drag: 'normal', haptics: true, sound: true, blocks: 'small' },
 });
 let SAVE = freshSave();
 (function loadSave() {
@@ -61,14 +64,24 @@ let SAVE = freshSave();
     SAVE = { ...d, ...saved, stats: { ...d.stats, ...saved.stats }, daily: { ...d.daily, ...saved.daily }, settings: { ...d.settings, ...saved.settings } };
     // a damaged or future save shouldn't stop the game: anything of the wrong shape goes back to its default
     const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
-    for (const k of ['best', 'top']) if (!isObj(SAVE[k])) SAVE[k] = d[k];
-    for (const k of ['stars', 'levelBest', 'woodsSeen', 'woodsOff']) if (!Array.isArray(SAVE[k])) SAVE[k] = d[k];
-    for (const k in SAVE.top) if (!Array.isArray(SAVE.top[k])) delete SAVE.top[k];
+    const fixRecords = (rec, d) => {
+      for (const k of ['best', 'top']) if (!isObj(rec[k])) rec[k] = d[k];
+      for (const k of ['stars', 'levelBest']) if (!Array.isArray(rec[k])) rec[k] = d[k];
+      for (const k in rec.top) if (!Array.isArray(rec.top[k])) delete rec.top[k];
+      if (!(rec.unlocked >= 1)) rec.unlocked = 1;
+      rec.daily = { ...d.daily, ...(isObj(rec.daily) ? rec.daily : {}) };
+    };
+    fixRecords(SAVE, d);
+    for (const k of ['woodsSeen', 'woodsOff']) if (!Array.isArray(SAVE[k])) SAVE[k] = d[k];
     if (!DIFFS[SAVE.diff]) SAVE.diff = d.diff;
     if (!DRAG[SAVE.settings.drag]) SAVE.settings.drag = d.settings.drag;
-    if (!(SAVE.unlocked >= 1)) SAVE.unlocked = 1;
+    if (!SIZES[SAVE.settings.blocks]) SAVE.settings.blocks = d.settings.blocks;
     // high-score lists came later: start each Classic list with the best score saved before them
     if (!saved.top) for (const k of Object.keys(DIFFS)) if (SAVE.best['classic-' + k]) SAVE.top['classic-' + k] = [{ s: SAVE.best['classic-' + k], d: '' }];
+    // the block size setting came later; Classic and Zen were played with large blocks then, so their records move there
+    if (!isObj(saved.large)) for (const k of ['best', 'top']) for (const key of Object.keys(SAVE[k]))
+      if (/^(classic|zen)/.test(key)) { SAVE.large[k][key] = SAVE[k][key]; delete SAVE[k][key]; }
+    fixRecords(SAVE.large, d.large);
     return;
   }
   // carry over best scores kept before progress was saved as one record
@@ -77,6 +90,8 @@ let SAVE = freshSave();
     const d = localStorage.getItem('grainfall-diff'); if (DIFFS[d]) SAVE.diff = d;
   } catch {}
 })();
+// the records for the block size in use
+const rec = () => SAVE.settings.blocks === 'large' ? SAVE.large : SAVE;
 function persist() {
   const j = JSON.stringify(SAVE);
   try { window.webkit?.messageHandlers?.save?.postMessage(j); } catch {}
@@ -145,6 +160,7 @@ function buildBoard(crackTop, width, seg, top = VTOP) {
   }
   for (let r = crackTop; r < ROWS; r++) grid.push(genRow());
 }
+const lowRows = () => R.low * ROWS / 18; // R.low is in large blocks; twice as many rows of small ones
 // Classic and Zen start from the floor: a few low rows of wood, each with gaps to fill.
 function lowBoard(n) {
   grid = [];
@@ -201,6 +217,8 @@ function cutPieces(r0 = 0) {
   }
 }
 const countCells = v => grid.reduce((a, row) => a + row.filter(x => x === v).length, 0);
+
+const menuBoard = () => { buildBoard(Math.round(VBOT * ROWS / 36), 1, [1, 4]); cutPieces(); }; // a board sits behind the menu
 
 // ---------- pieces ----------
 function takeKey() {
@@ -370,9 +388,9 @@ function finishClear() {
   if (mode === 'level' && !countCells(GOLD)) { finish('won'); return; }
   // Zen: a cleared board gets a fresh low layer so there's always something to fill
   if (mode === 'zen' && !grid.some(r => r.some(Boolean))) {
-    grid.splice(0, R.low);
-    for (let k = 0; k < R.low; k++) grid.push(lowRow());
-    cutPieces(ROWS - R.low);
+    grid.splice(0, lowRows());
+    for (let k = 0; k < lowRows(); k++) grid.push(lowRow());
+    cutPieces(ROWS - lowRows());
     popups.push({ text: 'Fresh layer', size: 1.5, color: '#fff1d6', x: COLS * cell / 2, y: ROWS * cell * 0.6, t: 0, life: 1.6 });
     chime(392, 0, 0.15, 1.2); chime(523, 0.15, 0.13, 1.2);
   }
@@ -383,7 +401,7 @@ function zenReset() {
   piece = null;
   if (!reduceMotion) for (let r = 0; r < ROWS / 2; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] && Math.random() < 0.5)
     particles.push({ v: grid[r][c], x: (c + 0.5) * cell, y: (r + 0.5) * cell, vx: (Math.random() - 0.5) * 20 * cell, vy: -(8 + Math.random() * 14) * cell, a: 0, va: (Math.random() - 0.5) * 12, s: 0.85 });
-  lowBoard(R.low); cutPieces();
+  lowBoard(lowRows()); cutPieces();
   popups.push({ text: 'Fresh boards', size: 1.6, color: '#fff1d6', x: COLS * cell / 2, y: ROWS * cell * 0.3, t: 0, life: 1.6 });
   chime(262, 0, 0.18, 1.2); chime(392, 0.15, 0.15, 1.2);
   spawn();
@@ -787,7 +805,7 @@ function note(text, ms = 4000) {
 // ---------- progress: daily streak, stars, wood unlocks ----------
 // t is the board's date, so a game that runs past midnight counts for the day it started
 function recordDaily(sc, t = today()) {
-  const d = SAVE.daily;
+  const d = rec().daily;
   if (d.last !== t) { d.streak = d.last === dayBefore(t) ? d.streak + 1 : 1; d.last = t; }
   d.bestStreak = Math.max(d.bestStreak, d.streak);
   if (d.date !== t) { d.date = t; d.best = 0; }
@@ -795,17 +813,18 @@ function recordDaily(sc, t = today()) {
   d.best = Math.max(d.best, sc);
   return isBest;
 }
-const totalStars = () => SAVE.stars.reduce((a, s) => a + (s || 0), 0);
-const classicBest = () => Math.max(0, ...Object.keys(DIFFS).map(k => SAVE.best['classic-' + k] || 0));
+const totalStars = (r = rec()) => r.stars.reduce((a, s) => a + (s || 0), 0);
+const classicBest = (r = rec()) => Math.max(0, ...Object.keys(DIFFS).map(k => r.best['classic-' + k] || 0));
+const either = f => Math.max(f(SAVE), f(SAVE.large)); // wood unlocks count progress made with either block size
 const WOOD_RULES = {
   maple:  { need: 'Your starting wood',                   prog: () => [1, 1] },
   birch:  { need: 'Clear 50 rows',                        prog: () => [SAVE.stats.rows, 50] },
-  oak:    { need: 'Earn 10 level stars',                  prog: () => [totalStars(), 10] },
-  cherry: { need: 'Play the daily board 3 days in a row', prog: () => [SAVE.daily.bestStreak, 3] },
-  walnut: { need: 'Score 15,000 in one Classic game',     prog: () => [classicBest(), 15000] },
-  ebony:  { need: 'Finish level 12, Old Growth',          prog: () => [SAVE.stars[11] ? 1 : 0, 1] },
-  redwood: { need: 'Finish level 50, Wildwood',           prog: () => [SAVE.stars[49] ? 1 : 0, 1] },
-  olive:  { need: 'Finish level 100, The Great Tree',     prog: () => [SAVE.stars[99] ? 1 : 0, 1] },
+  oak:    { need: 'Earn 10 level stars',                  prog: () => [either(totalStars), 10] },
+  cherry: { need: 'Play the daily board 3 days in a row', prog: () => [either(r => r.daily.bestStreak), 3] },
+  walnut: { need: 'Score 15,000 in one Classic game',     prog: () => [either(classicBest), 15000] },
+  ebony:  { need: 'Finish level 12, Old Growth',          prog: () => [either(r => r.stars[11] ? 1 : 0), 1] },
+  redwood: { need: 'Finish level 50, Wildwood',           prog: () => [either(r => r.stars[49] ? 1 : 0), 1] },
+  olive:  { need: 'Finish level 100, The Great Tree',     prog: () => [either(r => r.stars[99] ? 1 : 0), 1] },
 };
 const woodUnlocked = k => { const [a, b] = WOOD_RULES[k].prog(); return a >= b; };
 // every unlocked wood the player hasn't left out in the Workshop; each piece is cut from one of them
@@ -815,34 +834,45 @@ function newUnlocks() {
   SAVE.woodsSeen.push(...fresh);
   return fresh;
 }
-const levelTotal = () => SAVE.levelBest.reduce((a, s) => a + (s || 0), 0);
+const levelTotal = () => rec().levelBest.reduce((a, s) => a + (s || 0), 0);
 // keep the five best scores for a mode; returns this score's place on the list (1 is a new best), or 0
 function addTop(key, s, d = today()) {
   if (!s) return 0;
-  const list = SAVE.top[key] ||= [], e = { s, d };
+  const list = rec().top[key] ||= [], e = { s, d };
   list.push(e); list.sort((a, b) => b.s - a.s); list.length = Math.min(list.length, 5);
   return list.indexOf(e) + 1;
 }
 const placeText = p => p === 1 ? 'New best!' : p ? `${p}${['', 'st', 'nd', 'rd'][p] || 'th'} best` : '';
 const fmt = n => n.toLocaleString();
+// Level i for the block size in use: on the half-size board the crack is half as deep, special blocks are halved (never
+// removed), growth comes half as often and the clock is cut to match.
+function levelAt(i) {
+  const L = LEVELS[i];
+  if (ROWS === 36) return L;
+  const half = n => n && Math.ceil(n / 2);
+  // depth stops at 11, which leaves the same headroom over the crack that the deepest small-block levels have
+  return { ...L, depth: Math.min(11, half(L.depth)), seg: L.seg.map(half), knots: half(L.knots), ambers: half(L.ambers), kegs: half(L.kegs), irons: half(L.irons),
+    grow: L.grow && L.grow * 2, time: Math.max(45, Math.round(L.time * LARGE_TIME / 5) * 5) };
+}
+const LARGE_TIME = 0.5;
 const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15 ? 2 : 1;
 
 // ---------- game flow ----------
 function startGame(m, li = -1) {
   initAudio();
   mode = m; levelIdx = li;
-  m === 'level' || m === 'daily' ? setBoardSize(22, 36) : setBoardSize(11, 18);
+  setBoardSize(...SIZES[SAVE.settings.blocks]);
   if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
   else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
   else if (m === 'zen') R = { ...ZEN };
   else {
-    const L = LEVELS[li];
+    const L = levelAt(li);
     R = { timer: L.time, grav: L.grav ?? 0.8, ramp: 0.05, minGrav: L.minGrav ?? 0.25, ghost: L.ghost ?? true, mult: 1, gold: 0, knot: 0, axe: L.axe,
       refill: false, stackOutEnds: true, grow: L.grow || 0, fog: !!L.fog, dusk: !!L.dusk };
   }
   dailyDate = today();
   rng = m === 'daily' ? mulberry32(seedOf('grainfall-' + dailyDate)) : m === 'level' ? mulberry32(LEVELS[li].seed) : Math.random;
-  if (m === 'level') levelBoard(LEVELS[li]); else if (R.low) lowBoard(R.low); else buildBoard(24, 1, [1, 4], 14); // Daily: the pile starts in the lower part of the board
+  if (m === 'level') levelBoard(levelAt(li)); else if (R.low) lowBoard(lowRows()); else buildBoard(Math.round(24 * ROWS / 36), 1, ROWS < 36 ? [1, 2] : [1, 4], 14); // Daily: the pile starts in the lower part of the board
   cutPieces();
   bag = []; nextKey = takeKey(); nextV = randV(); holdKey = null; buildSprites();
   particles = []; popups = []; flashes = []; shakeT = 0;
@@ -854,7 +884,7 @@ function startGame(m, li = -1) {
   SAVE.stats.games++;
   hudLabels();
   if (!SAVE.tutorialDone) startTut();
-  else if (m === 'level') note(`Level ${li + 1} · ${LEVELS[li].name}. ${LEVELS[li].tip || levelTraits(LEVELS[li])}`, 5000);
+  else if (m === 'level') note(`Level ${li + 1} · ${LEVELS[li].name}. ${LEVELS[li].tip || levelTraits(levelAt(li))}`, 5000);
   else if (m === 'daily') note(`Daily board for ${new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}. Same board for everyone today.`);
   spawn(); hud();
 }
@@ -878,16 +908,16 @@ function finish(kind) {
   tutStep = -1; showBanner('');
   let title, detail, stars = 0, main = ['Play again', () => startGame(mode, levelIdx)], alt = null;
   if (mode === 'level') {
-    const L = LEVELS[levelIdx];
+    const L = levelAt(levelIdx);
     const n = levelIdx + 1;
     if (kind === 'won') {
       // finishing early pays: 10 points for every second left on the clock
-      const secs = Math.ceil(timeLeft), bonus = secs * 10, best = SAVE.levelBest[levelIdx] || 0;
+      const secs = Math.ceil(timeLeft), bonus = secs * 10, best = rec().levelBest[levelIdx] || 0;
       score += bonus;
-      if (score > best) SAVE.levelBest[levelIdx] = score;
+      if (score > best) rec().levelBest[levelIdx] = score;
       stars = starsFor(timeLeft, L.time);
-      SAVE.stars[levelIdx] = Math.max(SAVE.stars[levelIdx] || 0, stars);
-      SAVE.unlocked = Math.max(SAVE.unlocked, levelIdx + 2);
+      rec().stars[levelIdx] = Math.max(rec().stars[levelIdx] || 0, stars);
+      rec().unlocked = Math.max(rec().unlocked, levelIdx + 2);
       title = `Level ${n} complete!`;
       detail = `${L.name} · ${secs} s to spare (+${fmt(bonus)})\n` + (score > best ? 'New best!' : `Best ${fmt(best)}`) + ` · Total score ${fmt(levelTotal())}`;
       if (levelIdx + 1 < LEVELS.length) main = ['Next level', () => startGame('level', levelIdx + 1)];
@@ -901,16 +931,16 @@ function finish(kind) {
     }
   } else if (mode === 'daily') {
     const isBest = recordDaily(score, dailyDate), place = addTop('daily', score, dailyDate);
-    const st = SAVE.daily.streak;
+    const st = rec().daily.streak;
     title = kind === 'stacked' ? 'Stacked out' : "Time's up";
-    detail = `Daily board · ${lines} rows · ${st}-day streak` + (isBest ? ' · Best today!' : ` · Today's best ${fmt(SAVE.daily.best)}`) + (place ? `\n${placeText(place)} daily score` : '');
+    detail = `Daily board · ${lines} rows · ${st}-day streak` + (isBest ? ' · Best today!' : ` · Today's best ${fmt(rec().daily.best)}`) + (place ? `\n${placeText(place)} daily score` : '');
     main = ['Try again', () => startGame('daily')];
   } else if (mode === 'zen') {
     title = 'Nice and calm';
     detail = `${lines} rows cleared` + (lines ? ` · ${placeText(addTop('zen', lines))}` : '').replace(/ · $/, '');
   } else {
-    const key = 'classic-' + SAVE.diff, best = SAVE.best[key] || 0, isBest = score > best, place = addTop(key, score);
-    if (isBest) SAVE.best[key] = score;
+    const key = 'classic-' + SAVE.diff, best = rec().best[key] || 0, isBest = score > best, place = addTop(key, score);
+    if (isBest) rec().best[key] = score;
     title = kind === 'stacked' ? 'Stacked out' : "Time's up";
     detail = `${lines} rows · ${DIFFS[SAVE.diff].name}` + (isBest ? ' · New best!' : ` · Best ${fmt(best)}`) + (place > 1 ? ` · ${placeText(place)}` : '');
   }
@@ -969,18 +999,18 @@ function showScreen(id) {
 }
 function refreshMenu() {
   $('mLevelsSub').textContent = `Dig down to the gold · ${totalStars()} of ${LEVELS.length * 3} stars`;
-  const d = SAVE.daily, t = today();
+  const d = rec().daily, t = today();
   $('mDailySub').textContent = d.date === t ? `Today's best ${d.best} · ${d.streak}-day streak`
     : d.last === yesterday() ? `Keep your ${d.streak}-day streak going` : 'A new board every day';
 }
 function renderLevels() {
   $('levelsSub').textContent = `${totalStars()} of ${LEVELS.length * 3} stars · Total score ${fmt(levelTotal())}`;
   $('levelGrid').innerHTML = LEVELS.map((L, i) => {
-    const locked = i + 1 > SAVE.unlocked, s = SAVE.stars[i] || 0;
+    const locked = i + 1 > rec().unlocked, s = rec().stars[i] || 0;
     const starRow = [1, 2, 3].map(k => `<span class="${k <= s ? 'on' : ''}">★</span>`).join('');
-    return (i % 10 ? '' : `<h3 class="chap">${CHAPTERS[i / 10]}</h3>`) + `<button class="lvl${i % 10 === 9 ? ' boss' : ''}" type="button" data-i="${i}" ${locked ? 'disabled aria-label="Level ' + (i + 1) + ', locked"' : ''}><b>${i + 1}</b><small>${L.name}</small><i>${locked ? 'Locked' : starRow}</i>${SAVE.levelBest[i] ? `<em>${fmt(SAVE.levelBest[i])}</em>` : ''}</button>`;
+    return (i % 10 ? '' : `<h3 class="chap">${CHAPTERS[i / 10]}</h3>`) + `<button class="lvl${i % 10 === 9 ? ' boss' : ''}" type="button" data-i="${i}" ${locked ? 'disabled aria-label="Level ' + (i + 1) + ', locked"' : ''}><b>${i + 1}</b><small>${L.name}</small><i>${locked ? 'Locked' : starRow}</i>${rec().levelBest[i] ? `<em>${fmt(rec().levelBest[i])}</em>` : ''}</button>`;
   }).join('');
-  $('levelGrid').querySelector(`[data-i="${Math.min(SAVE.unlocked, LEVELS.length) - 1}"]`)?.scrollIntoView({ block: 'center' });
+  $('levelGrid').querySelector(`[data-i="${Math.min(rec().unlocked, LEVELS.length) - 1}"]`)?.scrollIntoView({ block: 'center' });
 }
 function renderWoods() {
   const grid = $('woodGrid');
@@ -1011,19 +1041,19 @@ function renderWoods() {
 function renderScores() {
   const when = d => d ? new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Earlier';
   const list = (title, key, unit = '') => {
-    const l = SAVE.top[key] || [];
+    const l = rec().top[key] || [];
     return `<h3>${title}</h3><dl>` + (l.length ? l.map((e, i) => `<dt>${i + 1}. ${when(e.d)}</dt><dd>${fmt(e.s)}${unit}</dd>`).join('')
       : '<dt class="none">No scores yet</dt><dd></dd>') + '</dl>';
   };
-  const lv = SAVE.levelBest.map((s, i) => [s || 0, i]).filter(x => x[0]).sort((a, b) => b[0] - a[0]).slice(0, 5);
-  $('hsList').innerHTML = `<h3>Levels</h3><dl><dt>Total score</dt><dd>${fmt(levelTotal())}</dd>` +
+  const lv = rec().levelBest.map((s, i) => [s || 0, i]).filter(x => x[0]).sort((a, b) => b[0] - a[0]).slice(0, 5);
+  $('hsList').innerHTML = `<p>${SAVE.settings.blocks === 'large' ? 'Large' : 'Small'}-block records. Each block size keeps its own.</p><h3>Levels</h3><dl><dt>Total score</dt><dd>${fmt(levelTotal())}</dd>` +
     lv.map(([s, i]) => `<dt>Level ${i + 1} · ${LEVELS[i].name}</dt><dd>${fmt(s)}</dd>`).join('') + '</dl>' +
     Object.keys(DIFFS).map(k => list(`Classic · ${DIFFS[k].name}`, 'classic-' + k)).join('') +
     list('Daily board', 'daily') + list('Zen', 'zen', ' rows');
 }
 function renderStats() {
   renderScores();
-  const st = SAVE.stats, d = SAVE.daily;
+  const st = SAVE.stats, d = rec().daily;
   const rows = [
     ['Games played', st.games], ['Rows cleared', st.rows], ['Tetrises', st.tetrises], ['Best combo', st.bestCombo ? '×' + st.bestCombo : '–'],
     ['Gold blocks', st.golds], ['Knots broken', st.knots], ['Axes swung', st.axes],
@@ -1050,12 +1080,16 @@ function renderSettings() {
     el.oninput = () => { s[key] = el.value / 100; fill(); initAudio(); applyVolumes(); };
     el.onchange = () => { persist(); if (key === 'sfxVol') sfx(0.5, 1); };
   }
+  segment('sizeSeg', s.blocks, v => {
+    s.blocks = v; persist(); renderSettings();
+    if (state === 'menu') { setBoardSize(...SIZES[v]); menuBoard(); }
+  });
   segment('sndSeg', s.sound ? 'on' : 'off', v => { s.sound = v === 'on'; persist(); renderSettings(); initAudio(); sfx(0.5, 1); });
 }
 function setDiff(d) {
   SAVE.diff = d; persist();
   segment('diff', d, setDiff);
-  const best = SAVE.best['classic-' + d] || 0;
+  const best = rec().best['classic-' + d] || 0;
   $('diffNote').textContent = DIFFS[d].note + (best ? ` Best: ${best}.` : '');
 }
 
@@ -1192,7 +1226,8 @@ if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
 }
 
 // a board sits behind the menu from the first frame
-buildBoard(VBOT, 1, [1, 4]); cutPieces(); nextKey = takeKey(); nextV = randV();
+[COLS, ROWS] = SIZES[SAVE.settings.blocks];
+menuBoard(); nextKey = takeKey(); nextV = randV();
 resize(); hudLabels(); hud();
 showScreen('menu');
 document.fonts.load('40px "Lilita One"').then(drawLogo, () => {});
