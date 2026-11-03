@@ -15,7 +15,7 @@ function setBoardSize(cols, rows) {
 }
 // Shown in Settings. major.minor.fix: a big overhaul bumps the first part, a new feature or noticeable change the
 // second, a bug fix or small tweak the third (two digits each, so 1.04.12). Bump it with every release.
-const VERSION = '1.02.00';
+const VERSION = '1.03.01';
 const VARIANTS = 40, GOLD = 100, KNOT = 101, CRACKED = 102, AXE = 103, AMBER = 104, KEG = 105, IRON = 106; // grid cells: 0 empty, 1..VARIANTS plain wood, spread over the woods in the mix
 const SHAPES = {
   I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
@@ -90,8 +90,9 @@ let SAVE = freshSave();
     const d = localStorage.getItem('grainfall-diff'); if (DIFFS[d]) SAVE.diff = d;
   } catch {}
 })();
-// the records for the block size in use
-const rec = () => SAVE.settings.blocks === 'large' ? SAVE.large : SAVE;
+// the records for the block size in use: during a game, the size it started with, even if Settings changed it mid-game
+let gameSize = null;
+const rec = () => (gameSize || SAVE.settings.blocks) === 'large' ? SAVE.large : SAVE;
 function persist() {
   const j = JSON.stringify(SAVE);
   try { window.webkit?.messageHandlers?.save?.postMessage(j); } catch {}
@@ -250,12 +251,14 @@ function tryMove(dx, dy) {
   if (dx && lockResets < 15) { lockT = 0; lockResets++; }
   return true;
 }
+// where a turned piece may shift to fit, tried in order: sideways first, then up, so a piece lying on the pile can stand up
+const KICKS = [[0, 0], [-1, 0], [1, 0], [0, -1], [-1, -1], [1, -1], [-2, 0], [2, 0], [0, -2], [-1, -2], [1, -2]];
 function tryRotate(dir) {
   if (!piece || state !== 'play') return;
   const m = rotate(piece.m, dir);
-  for (const k of [0, -1, 1, -2, 2]) {
-    if (!collide(m, piece.x + k, piece.y)) {
-      piece.m = m; piece.x += k;
+  for (const [k, up] of KICKS) {
+    if (!collide(m, piece.x + k, piece.y + up)) {
+      piece.m = m; piece.x += k; piece.y += up;
       if (lockResets < 15) { lockT = 0; lockResets++; }
       sfx(0.25, 1.6); tut('rotate');
       return;
@@ -347,7 +350,7 @@ function clearRowsNow(full, axe) {
   const g0 = gravity();
   score += pts; lines += full.length;
   if (mode === 'classic' && gravity() < g0) // pieces just got faster
-    popups.push({ text: 'Faster!', size: 1.3, color: '#ffb35c', x: COLS * cell / 2, y: fxUnit() * 6, t: 0.3, life: 1.2 });
+    popups.push({ text: `Speed ${speedLevel()}!`, size: 1.3, color: '#ffb35c', x: COLS * cell / 2, y: fxUnit() * 6, t: 0.3, life: 1.2 });
   const st = SAVE.stats;
   st.rows += full.length; st.golds += golds; st.knots += knots;
   if (tetris) st.tetrises++;
@@ -777,7 +780,7 @@ const haptic = kind => { if (!SAVE.settings.haptics) return; try { window.webkit
 // ---------- tutorial and banner notes ----------
 const TUT = [
   { key: 'move', text: 'Drag left or right to slide the piece.' },
-  { key: 'rotate', text: 'Tap the board to turn it.' },
+  { key: 'rotate', text: 'Tap the board to turn it. Swipe up to turn it the other way.' },
   { key: 'drop', text: 'Flick down, or press Drop, to send it down.' },
   { key: 'clear', text: 'Fill the gaps to complete rows. Full rows break apart.' },
 ];
@@ -861,8 +864,8 @@ const starsFor = (left, total) => left >= total * 0.4 ? 3 : left >= total * 0.15
 // ---------- game flow ----------
 function startGame(m, li = -1) {
   initAudio();
-  mode = m; levelIdx = li;
-  setBoardSize(...SIZES[SAVE.settings.blocks]);
+  mode = m; levelIdx = li; gameSize = SAVE.settings.blocks;
+  setBoardSize(...SIZES[gameSize]);
   if (m === 'daily') R = { ...DIFFS.normal, timer: DIFFS.normal.time, low: 0, refill: true, stackOutEnds: true };
   else if (m === 'classic') R = { ...DIFFS[SAVE.diff], timer: 0, refill: false, stackOutEnds: true };
   else if (m === 'zen') R = { ...ZEN };
@@ -886,7 +889,7 @@ function startGame(m, li = -1) {
   hudLabels();
   if (!SAVE.tutorialDone) startTut();
   else if (m === 'level') note(`Level ${li + 1} · ${LEVELS[li].name}. ${LEVELS[li].tip || levelTraits(levelAt(li))}`, 5000);
-  else if (m === 'daily') note(`Daily board for ${new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}. Same board for everyone today.`);
+  else if (m === 'daily') note(`Daily board for ${new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}. Same board for everyone on ${SAVE.settings.blocks} blocks today.`);
   spawn(); hud();
 }
 // a one-line summary of what's on a level, for levels without a tip
@@ -946,7 +949,9 @@ function finish(kind) {
     detail = `${lines} rows · ${DIFFS[SAVE.diff].name}` + (isBest ? ' · New best!' : ` · Best ${fmt(best)}`) + (place > 1 ? ` · ${placeText(place)}` : '');
   }
   const fresh = newUnlocks();
+  gameSize = null;
   persist();
+  if (kind === 'stacked' || kind === 'time') { knock(98, 0.9); knock(73, 0.8, 0.16); haptic('error'); } // a loss: two low knocks
   $('overT').textContent = title;
   $('overS').textContent = fmt(mode === 'zen' ? lines : score);
   $('overB').textContent = detail;
@@ -967,22 +972,29 @@ function setPaused(p) {
 }
 function quitToMenu() {
   if (mode === 'zen' && state.startsWith('paused')) { state = 'play'; finish('quit'); return; }
-  state = 'menu'; piece = null; tutStep = -1; showBanner(''); persist();
+  state = 'menu'; piece = null; gameSize = null; tutStep = -1; showBanner(''); persist();
+  // a fresh board behind the menu, not the game just left, at the block size now set
+  rng = Math.random; R.fog = R.dusk = false; holdKey = null; particles = []; popups = []; flashes = [];
+  setBoardSize(...SIZES[SAVE.settings.blocks]); menuBoard(); drawNext();
   showScreen('menu');
 }
 const gravity = () => Math.max(R.minGrav, R.grav - Math.floor(lines / 8) * R.ramp) * (tutStep >= 0 && tutStep < 3 ? 2.5 : 1); // seconds per row
+// Classic's speed, counted from 1 and going up with each speed-up until the pieces reach their fastest
+const speedLevel = () => 1 + Math.min(Math.floor(lines / 8), Math.ceil((R.grav - R.minGrav) / R.ramp - 1e-9));
 
 function hudLabels() {
-  $('timeL').textContent = mode === 'level' ? `Level ${levelIdx + 1}` : R.timer ? 'Time' : 'Rows';
-  $('timeU').hidden = !R.timer;
+  $('timeL').textContent = mode === 'level' ? `Level ${levelIdx + 1}` : R.timer ? 'Time' : mode === 'classic' ? 'Speed 1' : 'Rows';
+  $('timeU').textContent = R.timer ? ' s' : ' rows'; // Classic's label is its speed, so the rows count says what it is
+  $('timeU').hidden = !R.timer && mode !== 'classic';
   $('scoreL').textContent = 'Score';
 }
 function hud() {
   // game controls only show while a game is running; visibility keeps the bar's height so the board doesn't resize
   $('bar').classList.toggle('idle', state !== 'play' && state !== 'clearing');
   if (state === 'menu') { $('timeV').textContent = '–'; $('scoreV').textContent = '–'; $('timeU').hidden = true; return; }
-  $('timeU').hidden = !R.timer;
+  $('timeU').hidden = !R.timer && mode !== 'classic';
   $('timeV').textContent = R.timer ? Math.max(0, Math.ceil(timeLeft)) : lines;
+  if (mode === 'classic') $('timeL').textContent = `Speed ${speedLevel()}`;
   $('time').classList.toggle('low', !!R.timer && timeLeft <= 15 && state !== 'menu');
   $('scoreV').textContent = score;
 }
@@ -1165,6 +1177,8 @@ wrap.addEventListener('pointermove', e => {
   const vy = (e.clientY - touch.lastY) / Math.max(1, now - touch.lastT);
   touch.lastY = e.clientY; touch.lastT = now;
   if (Math.abs(e.clientX - touch.sx) > 8 || Math.abs(dy) > 8) touch.moved = true;
+  // a swipe up turns the piece the other way from a tap, once per swipe
+  if (!touch.turned && -dy > fxUnit() * 2.5 && -dy > Math.abs(e.clientX - touch.sx)) { touch.turned = true; tryRotate(-1); }
   if (vy > 1.4 && dy > fxUnit() * 2) { hardDrop(); touch = null; return; }
   const wantDown = Math.floor(Math.max(0, dy) / step);
   while (touch.dropped < wantDown && tryMove(0, 1)) { touch.dropped++; score++; }
@@ -1192,7 +1206,7 @@ $('levelGrid').onclick = e => { const b = e.target.closest('.lvl'); if (b && !b.
 $('go').onclick = () => startGame('classic');
 $('overMain').onclick = () => overActions.main?.();
 $('overAlt').onclick = () => overActions.alt?.();
-$('overMenu').onclick = () => { state = 'menu'; showScreen('menu'); };
+$('overMenu').onclick = quitToMenu;
 $('resume').onclick = () => setPaused(false);
 $('restart').onclick = () => startGame(mode, levelIdx);
 $('quit').onclick = quitToMenu;
